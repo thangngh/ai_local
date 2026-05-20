@@ -1,0 +1,32 @@
+gate_levels:
+  easy:
+    description: Small harness first. Fast checks that prove the patch is wired correctly.
+    required_to_promote: true
+    commands:
+      - test.harness
+
+  medium:
+    description: Full unit test signal after easy gates pass.
+    required_to_promote: true
+    commands:
+      - test.pytest
+
+  hard:
+    description: Static quality and type checks after tests pass.
+    required_to_promote: true
+    commands:
+      - test.ruff
+      - test.mypy
+
+  extreme:
+    description: Expensive or optional cross-stack checks. Run only after hard gates pass.
+    required_to_promote: false
+    commands:
+      - test.npm
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+

@@ -1,0 +1,128 @@
+skills:
+  - id: requirements.parse
+    risk_level: low
+    default_source_urls:
+      - https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e
+      - https://www.notion.so/365b38678ea581f1876ae3459ec1f686
+      - https://www.notion.so/365b38678ea581c2bbcbf79d42a9c1f2
+      - https://www.notion.so/366b38678ea581629d45fb6a245eacd9
+    allowed_tools:
+      - notion.fetch
+      - requirements.extract
+      - knowledge.search
+    writes:
+      - tasks.db.requirements
+      - knowledge.db.knowledge_items
+    gates:
+      - default_to_configured_notion_source_set
+      - all_configured_sources_fetched
+      - source_ref_required
+      - ambiguity_must_be_marked
+
+  - id: requirements.normalize
+    risk_level: low
+    allowed_tools:
+      - requirements.read
+      - acceptance_criteria.write
+      - knowledge.search
+    writes:
+      - tasks.db.acceptance_criteria
+    gates:
+      - criteria_must_be_observable
+      - criteria_must_map_to_test_or_manual_gate
+
+  - id: harness.generate
+    risk_level: medium
+    allowed_tools:
+      - project.inspect
+      - test.discover
+      - harness.create_pytest
+      - git.diff
+    writes:
+      - tests/harness
+    gates:
+      - no_production_code_changes
+      - test_must_map_to_acceptance_criteria
+      - focused_failure_expected_when_feasible
+
+  - id: harness.review
+    risk_level: medium
+    allowed_tools:
+      - git.diff
+      - harness.map_criteria
+      - harness.run_focused
+      - audit.write
+    writes:
+      - audit.db.evaluations
+    gates:
+      - reject_implementation_detail_only_tests
+      - reject_tests_that_pass_without_behavior
+
+  - id: implementation.plan
+    risk_level: medium
+    allowed_tools:
+      - shell.rg_search
+      - retriever.symbol_search
+      - knowledge.search
+      - tasks.update
+    writes:
+      - tasks.db.patch_queue
+    gates:
+      - harness_required
+      - split_large_patch
+      - confirmation_for_high_risk_changes
+
+  - id: patch.apply
+    risk_level: high
+    allowed_tools:
+      - filesystem.patch
+      - shell.rg_search
+      - git.diff
+      - audit.write
+    writes:
+      - allowed_patch_files
+    gates:
+      - allowed_files_only
+      - patch_size_limit
+      - no_dependency_change_without_confirmation
+
+  - id: harness.run
+    risk_level: medium
+    allowed_tools:
+      - harness.run_focused
+      - test.pytest
+      - test.ruff
+      - test.mypy
+      - test.npm
+      - audit.write
+    writes:
+      - audit.db.tool_runs
+      - tasks.db.check_results
+    gates:
+      - focused_tests_before_broad_tests
+
+  - id: evaluator.score
+    risk_level: medium
+    allowed_tools:
+      - git.diff
+      - audit.read
+      - evaluator.score_patch
+      - audit.write
+    writes:
+      - audit.db.evaluations
+    gates:
+      - no_score_without_evidence
+
+  - id: decision.gate
+    risk_level: high
+    allowed_tools:
+      - confirmation.create
+      - tasks.update
+      - memory.write
+    writes:
+      - tasks.db.decisions
+      - memory.db.confirmed_rules
+    gates:
+      - ask_user_on_high_ambiguity
+      - ask_tech_lead_on_high_risk
+      - stop_when_retry_budget_exhausted

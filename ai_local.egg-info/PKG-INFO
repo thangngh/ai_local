@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: ai-local
+Version: 0.1.0
+Summary: Local AI infrastructure built with Python and FastAPI
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: pydantic>=2.8
+Requires-Dist: pydantic-settings>=2.4
+Requires-Dist: SQLAlchemy>=2.0
+Requires-Dist: PyYAML>=6.0
+Requires-Dist: typer>=0.12
+Requires-Dist: tree-sitter>=0.22
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"
+Requires-Dist: mypy>=1.11; extra == "dev"
+Requires-Dist: types-PyYAML>=6.0; extra == "dev"

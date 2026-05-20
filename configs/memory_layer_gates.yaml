@@ -1,0 +1,90 @@
+memory_layer_gate_levels:
+  easy:
+    description: Basic memory layer classification and direct retrieval policy.
+    required_to_promote: true
+    max_hop_depth: 2
+    layers:
+      - id: M0_SESSION_SCRATCH
+        allowed_scopes: [session]
+        may_be_policy: false
+        inject_as_fact: false
+      - id: M1_PERSONAL_PREFERENCE
+        allowed_scopes: [global, project]
+        may_be_policy: false
+        inject_as_fact: false
+
+  medium:
+    description: Project conventions and confirmed decisions with evidence requirements.
+    required_to_promote: true
+    max_hop_depth: 5
+    layers:
+      - id: M2_PROJECT_CONVENTION
+        allowed_scopes: [project, repo]
+        min_evidence_strength: 0.60
+        may_be_policy: false
+      - id: M3_CONFIRMED_DECISION
+        allowed_scopes: [global, project, repo]
+        min_evidence_strength: 0.80
+        requires_confirmation: true
+        may_be_policy: true
+
+  hard:
+    description: Workflow and safety memories under conflict, stale-source, and wrong-scope pressure.
+    required_to_promote: true
+    max_hop_depth: 10
+    layers:
+      - id: M4_WORKFLOW_MEMORY
+        allowed_scopes: [global, project, repo]
+        min_usage_success_rate: 0.50
+        verify_when_stale: true
+      - id: M5_SAFETY_POLICY
+        allowed_scopes: [global, project, repo]
+        never_expire: true
+        requires_confirmation: true
+        may_be_policy: true
+
+  extreme:
+    description: Deep-hop memory interference up to hop 20 across all memory layers.
+    required_to_promote: false
+    max_hop_depth: 20
+    layers:
+      - id: ALL_LAYERS_DEEP_INTERFERENCE
+        covered_layers:
+          - M0_SESSION_SCRATCH
+          - M1_PERSONAL_PREFERENCE
+          - M2_PROJECT_CONVENTION
+          - M3_CONFIRMED_DECISION
+          - M4_WORKFLOW_MEMORY
+          - M5_SAFETY_POLICY
+        reject_wrong_scope: true
+        reject_policy_from_unconfirmed_memory: true
+        quarantine_secret_like_claims: true
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+memory_layers:
+  M0_SESSION_SCRATCH:
+    purpose: Temporary run/session state.
+    fact_policy: never_fact
+  M1_PERSONAL_PREFERENCE:
+    purpose: User preference, style, learning direction, preferred stack.
+    fact_policy: hint_only
+  M2_PROJECT_CONVENTION:
+    purpose: Project layout, conventions, workflows.
+    fact_policy: fact_with_project_evidence
+  M3_CONFIRMED_DECISION:
+    purpose: User-confirmed or strongly evidenced decision.
+    fact_policy: fact_with_confirmation
+  M4_WORKFLOW_MEMORY:
+    purpose: Effective commands, test flow, debug flow.
+    fact_policy: fact_when_fresh_and_successful
+  M5_SAFETY_POLICY:
+    purpose: Safety and policy rules.
+    fact_policy: binding_policy_when_confirmed
+
+max_supported_hop_depth: 20
+

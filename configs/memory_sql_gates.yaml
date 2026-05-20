@@ -1,0 +1,172 @@
+memory_sql_gate_levels:
+  easy:
+    description: Basic memory tables and layer mapping.
+    required_to_promote: true
+    max_hop_depth: 5
+    cases:
+      - id: memory_items_table_has_core_fields
+        flow: memory_layer -> schema -> memory_items
+        memory_layer: M1_PERSONAL_PREFERENCE
+        required_tables:
+          - memory_items
+          - memory_evidence
+        noise_type: none
+        expected_decision: accept
+      - id: session_memory_not_promoted_to_policy
+        flow: M0_SESSION_SCRATCH -> write_gate -> memory_items
+        memory_layer: M0_SESSION_SCRATCH
+        required_tables:
+          - memory_items
+        noise_type: scope_noise
+        expected_decision: reject_policy_promotion
+
+  medium:
+    description: Write score, retrieval score, evidence, and project scope.
+    required_to_promote: true
+    max_hop_depth: 12
+    cases:
+      - id: project_convention_requires_evidence
+        flow: memory_candidate -> write_score -> memory_evidence -> memory_items
+        memory_layer: M2_PROJECT_CONVENTION
+        required_tables:
+          - memory_items
+          - memory_evidence
+        noise_type: weak_project_evidence
+        expected_decision: verify
+      - id: retrieval_score_blocks_wrong_scope_memory
+        flow: memory_items -> retrieval_score -> context_builder
+        memory_layer: M2_PROJECT_CONVENTION
+        required_tables:
+          - memory_items
+          - memory_usage
+        noise_type: wrong_scope
+        expected_decision: drop
+
+  hard:
+    description: Conflict tracking, stale source hash, safety memory, and SQL auditability.
+    required_to_promote: true
+    max_hop_depth: 25
+    cases:
+      - id: conflict_memory_records_conflict_table
+        flow: memory_items -> memory_conflicts -> decision_gate
+        memory_layer: M3_CONFIRMED_DECISION
+        required_tables:
+          - memory_items
+          - memory_conflicts
+          - memory_evidence
+        noise_type: conflicting_memory
+        expected_decision: ask_user
+      - id: stale_file_hash_demotes_memory
+        flow: memory_items -> source_hash_check -> stale -> memory_updates
+        memory_layer: M2_PROJECT_CONVENTION
+        required_tables:
+          - memory_items
+          - memory_updates
+        noise_type: stale_source_hash
+        expected_decision: demote
+      - id: safety_policy_requires_confirmation
+        flow: memory_candidate -> write_gate -> confirmation -> memory_items
+        memory_layer: M5_SAFETY_POLICY
+        required_tables:
+          - memory_items
+          - memory_evidence
+          - memory_updates
+        noise_type: inferred_policy
+        expected_decision: ask_user
+
+  extreme:
+    description: Deep-hop memory poisoning and SQL schema integrity up to hop 50.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_hop_memory_poisoning_quarantined
+        flow: web -> docs -> retrieval -> memory_candidate -> write_score -> memory_conflicts -> decision_gate
+        memory_layer: M3_CONFIRMED_DECISION
+        required_tables:
+          - memory_items
+          - memory_evidence
+          - memory_conflicts
+          - memory_updates
+          - memory_usage
+        noise_type: deep_memory_poisoning
+        hop_depth: 50
+        expected_decision: quarantine
+      - id: deep_hop_safety_policy_laundering_stops
+        flow: memory_candidate -> evidence -> confirmation -> memory_items -> retrieval -> decision -> security_gate
+        memory_layer: M5_SAFETY_POLICY
+        required_tables:
+          - memory_items
+          - memory_evidence
+          - memory_conflicts
+          - memory_updates
+        noise_type: safety_policy_laundering
+        hop_depth: 45
+        expected_decision: stop
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+schema:
+  memory_items:
+    required_columns:
+      - id
+      - claim
+      - memory_level
+      - scope
+      - source
+      - confidence
+      - risk
+      - status
+      - created_at
+      - updated_at
+      - expires_at
+  memory_evidence:
+    required_columns:
+      - id
+      - memory_id
+      - evidence_type
+      - ref
+      - summary
+      - weight
+      - created_at
+  memory_conflicts:
+    required_columns:
+      - id
+      - memory_id
+      - conflicting_memory_id
+      - conflict_score
+      - reason
+      - status
+      - created_at
+  memory_updates:
+    required_columns:
+      - id
+      - memory_id
+      - update_type
+      - old_status
+      - new_status
+      - reason
+      - created_at
+  memory_usage:
+    required_columns:
+      - id
+      - memory_id
+      - run_id
+      - retrieval_score
+      - used_as
+      - outcome
+      - created_at
+
+hard_rules:
+  - no_secret_memory
+  - inferred_policy_requires_confirmation
+  - stale_source_hash_demotes_memory
+  - conflict_score_high_requires_user_or_verification
+  - wrong_scope_memory_not_injected_as_fact
+  - deep_memory_poisoning_quarantined
+
+max_supported_hop_depth: 50
+

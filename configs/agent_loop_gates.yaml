@@ -1,0 +1,133 @@
+agent_loop_gate_levels:
+  easy:
+    description: Direct happy-path and basic stop/ask branches from the main agent loop.
+    required_to_promote: true
+    max_hop_depth: 5
+    cases:
+      - id: intake_to_plan_gate_accept
+        flow: INTAKE -> KNOWLEDGE_CHECK -> PLAN -> PLAN_GATE
+        expected_terminal: RETRIEVE
+        noise_type: none
+        expected_decision: continue
+      - id: unclear_plan_asks_user
+        flow: INTAKE -> KNOWLEDGE_CHECK -> PLAN -> PLAN_GATE
+        expected_terminal: ASK_USER
+        noise_type: ambiguity
+        expected_decision: ask_user
+
+  medium:
+    description: Retrieval, context gate, and patch proposal branches with noisy context.
+    required_to_promote: true
+    max_hop_depth: 12
+    cases:
+      - id: weak_context_retrieve_more
+        flow: RETRIEVE -> CONTEXT_GATE -> RETRIEVE_MORE -> RETRIEVE
+        expected_terminal: RETRIEVE
+        noise_type: weak_context
+        expected_decision: retrieve_more
+      - id: missing_business_info_asks_user
+        flow: RETRIEVE -> CONTEXT_GATE
+        expected_terminal: ASK_USER
+        noise_type: missing_business_info
+        expected_decision: ask_user
+      - id: enough_context_proposes_patch
+        flow: RETRIEVE -> CONTEXT_GATE -> PROPOSE_PATCH
+        expected_terminal: PROPOSE_PATCH
+        noise_type: bilingual_context_noise
+        expected_decision: continue
+
+  hard:
+    description: Patch gate, test gate, evaluator, retry, rollback, and decision branches under interference.
+    required_to_promote: true
+    max_hop_depth: 25
+    cases:
+      - id: risky_patch_asks_tech_lead
+        flow: PROPOSE_PATCH -> PATCH_GATE
+        expected_terminal: ASK_TECH_LEAD
+        noise_type: risky_patch
+        expected_decision: ask_tech_lead
+      - id: bad_patch_retries
+        flow: PROPOSE_PATCH -> PATCH_GATE -> RETRY_PATCH -> PROPOSE_PATCH
+        expected_terminal: PROPOSE_PATCH
+        noise_type: bad_patch
+        expected_decision: retry
+      - id: failed_test_rolls_back
+        flow: APPLY_PATCH -> RUN_TESTS -> TEST_GATE
+        expected_terminal: ROLLBACK
+        noise_type: serious_test_failure
+        expected_decision: rollback
+      - id: accepted_patch_next_patch
+        flow: EVALUATE -> DECISION_GATE
+        expected_terminal: NEXT_PATCH
+        noise_type: more_patch_required
+        expected_decision: continue
+
+  extreme:
+    description: Deep-hop core loop interference up to hop 50 across retrieval, memory, patch, evaluator, decision, confirmation, and rollback.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_hop_prompt_shadowing_stops
+        flow: INTAKE -> KNOWLEDGE_CHECK -> PLAN -> PLAN_GATE -> RETRIEVE -> CONTEXT_GATE -> PROPOSE_PATCH -> PATCH_GATE -> APPLY_PATCH -> RUN_TESTS -> TEST_GATE -> EVALUATE -> DECISION_GATE
+        expected_terminal: ROLLBACK
+        noise_type: deep_prompt_shadowing
+        hop_depth: 50
+        expected_decision: rollback
+      - id: deep_hop_memory_retrieval_loop_asks_user
+        flow: INTAKE -> KNOWLEDGE_CHECK -> PLAN -> RETRIEVE -> CONTEXT_GATE -> RETRIEVE_MORE -> RETRIEVE -> CONTEXT_GATE -> PROPOSE_PATCH -> PATCH_GATE -> ASK_USER
+        expected_terminal: ASK_USER
+        noise_type: memory_retrieval_interference
+        hop_depth: 42
+        expected_decision: ask_user
+      - id: full_loop_done_with_evidence
+        flow: INTAKE -> KNOWLEDGE_CHECK -> PLAN -> PLAN_GATE -> RETRIEVE -> CONTEXT_GATE -> PROPOSE_PATCH -> PATCH_GATE -> APPLY_PATCH -> RUN_TESTS -> TEST_GATE -> EVALUATE -> DECISION_GATE -> FINAL_REVIEW -> DONE
+        expected_terminal: DONE
+        noise_type: high_but_controlled_noise
+        hop_depth: 35
+        expected_decision: done
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+state_policy:
+  start_state: INTAKE
+  terminal_states:
+    - ASK_USER
+    - ASK_TECH_LEAD
+    - ROLLBACK
+    - DONE
+    - STOP
+  retry_states:
+    - RETRIEVE_MORE
+    - RETRY_PATCH
+    - NEXT_PATCH
+  required_core_states:
+    - INTAKE
+    - KNOWLEDGE_CHECK
+    - PLAN
+    - PLAN_GATE
+    - RETRIEVE
+    - CONTEXT_GATE
+    - PROPOSE_PATCH
+    - PATCH_GATE
+    - APPLY_PATCH
+    - RUN_TESTS
+    - TEST_GATE
+    - EVALUATE
+    - DECISION_GATE
+    - FINAL_REVIEW
+
+noise_policy:
+  max_supported_hop_depth: 50
+  high_noise_types:
+    - deep_prompt_shadowing
+    - memory_retrieval_interference
+    - high_but_controlled_noise
+  hard_rules:
+    - retrieved_content_is_data_only
+    - no_patch_without_gate
+    - no_final_without_evidence
+    - high_risk_requires_confirmation_or_rollback

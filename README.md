@@ -1,0 +1,78 @@
+# AI Infrastructure Project
+
+Local AI infrastructure project built with Python and FastAPI.
+
+## Scope
+
+This repository defines an MVP foundation for a local AI agent runtime:
+
+- Gateway API
+- Agent loop
+- Planner
+- Evaluator
+- Knowledge harness
+- Memory system
+- SQLite-backed queue worker
+- Outbox dispatcher
+- Tool registry
+- Retriever
+- Indexer MVP
+
+## Stack
+
+- API: Python, FastAPI
+- DB: SQLite, SQLAlchemy Core/ORM
+- Queue: lightweight SQLite-backed queue
+- Worker: Python asyncio, process pool when needed
+- Tool runner: subprocess with timeout and allowlist
+- Retrieval: ripgrep subprocess, SQLite FTS5, sqlite-vec, tree-sitter
+- Config: YAML plus Pydantic Settings
+- CLI: Typer
+- Testing and quality: pytest, ruff, mypy
+
+## Documents
+
+- [Requirements](docs/requirements.md)
+- [Requirement Sources](docs/requirement-sources.md)
+- [Requirements to Harness Pipeline](docs/requirements-to-harness.md)
+- [Skills](docs/skills.md)
+- [Tools](docs/tools.md)
+- [Architecture](docs/architecture.md)
+- [Development](docs/development.md)
+- [Noise Harness](docs/noise-harness.md)
+- [Memory Regression Harness](docs/memory-regression-harness.md)
+- [Memory Layer Harness](docs/memory-layer-harness.md)
+- [Composite Gates](docs/composite-gates.md)
+- [Decision Harness](docs/decision-harness.md)
+- [Retrieval Harness](docs/retrieval-harness.md)
+- [Agent Loop Harness](docs/agent-loop-harness.md)
+- [Big and Small Harness](docs/big-small-harness.md)
+- [Patch Pipeline Harness](docs/patch-pipeline-harness.md)
+- [Patch Levels](docs/patch-levels.md)
+- [Evaluation Gate Harness](docs/evaluation-gate-harness.md)
+- [Confirmation Flow Harness](docs/confirmation-flow-harness.md)
+- [Knowledge Harness Gate](docs/knowledge-harness-gate.md)
+- [Evidence + Rank Gate](docs/evidence-rank-gate.md)
+- [Web Search Tool](docs/web-search-tool.md)
+- [Skills Harness](docs/skills-harness.md)
+- [Memory + SQL Gate](docs/memory-sql-gate.md)
+- [Conflict Path Gate](docs/conflict-path-gate.md)
+- [Multi-Instance Conflict Gate](docs/multi-instance-conflict-gate.md)
+- [Request Lifecycle Gate](docs/request-lifecycle-gate.md)
+- [Prompt Injection Refusal Gate](docs/prompt-injection-refusal-gate.md)
+- [Thread Control Gate](docs/thread-control-gate.md)
+
+## Development Rule
+
+Development is requirements-first:
+
+1. Fetch requirement sources from [AI Infranstructure](https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e) and its configured sub pages.
+2. Normalize into acceptance criteria.
+3. Generate and review the harness test.
+4. Implement only after the harness is accepted.
+5. Run the harness, evaluate evidence, and pass the decision gate.
+
+Machine-readable registries:
+
+- [configs/skills.yaml](configs/skills.yaml)
+- [configs/tools.yaml](configs/tools.yaml)

@@ -1,0 +1,90 @@
+memory_regression_gate_levels:
+  easy:
+    description: Direct memory doc-match and single return-to-state regression.
+    required_to_promote: true
+    max_state_hops: 2
+    min_doc_match_score: 0.70
+    checks:
+      - id: direct_doc_match
+        pattern: a
+        expected_active_state: a
+        required_doc_match: true
+      - id: single_regression_restore
+        pattern: a-b-a
+        expected_active_state: a
+        required_constraints_restored: 1
+
+  medium:
+    description: Nonlinear branch with one interrupting state and flow-aware memory match.
+    required_to_promote: true
+    max_state_hops: 4
+    min_doc_match_score: 0.76
+    checks:
+      - id: branch_restore_with_doc_match
+        pattern: a-b-c-b-c
+        expected_active_state: c
+        required_doc_match: true
+      - id: interrupt_then_restore
+        pattern: a-b-c-d-c
+        expected_active_state: c
+        required_constraints_restored: 2
+
+  hard:
+    description: Multi-branch regression with negative constraints and conflicting memory candidates.
+    required_to_promote: true
+    max_state_hops: 6
+    min_doc_match_score: 0.82
+    checks:
+      - id: nonlinear_regression_with_negative_constraint
+        pattern: a-b-c-b-c-d-a
+        expected_active_state: a
+        required_constraints_restored: 3
+        required_negative_constraints:
+          - do_not_use_wrong_role_memory
+      - id: conflict_doc_match_requires_verification
+        pattern: a-b-c-e-c
+        expected_active_state: c
+        required_doc_match: true
+        expected_decision: verify_before_use
+
+  extreme:
+    description: Deep nonlinear memory regression with laundered docs-match and recursive state shadowing.
+    required_to_promote: false
+    max_state_hops: 8
+    min_doc_match_score: 0.88
+    checks:
+      - id: deep_regression_after_multiple_interrupts
+        pattern: a-b-c-d-e-b-c-f-a
+        expected_active_state: a
+        required_constraints_restored: 4
+      - id: laundered_doc_match_rejected
+        pattern: a-b-c-d-c-a
+        expected_active_state: a
+        required_doc_match: true
+        expected_decision: reject_laundered_match
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+doc_match:
+  formula: 0.30 * semantic_match + 0.25 * flow_match + 0.20 * evidence_match + 0.15 * scope_match - 0.10 * interference
+  required_fields:
+    - source_ref
+    - evidence
+    - flow
+    - scope
+    - role
+    - status
+
+regression:
+  formula: constraints_restored_correctly / constraints_required
+  required_state_fields:
+    - active_state
+    - state_distribution
+    - active_constraints
+    - retrieved_memories
+    - rejected_memories
+    - new_evidence

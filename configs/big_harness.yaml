@@ -1,0 +1,39 @@
+big_harness:
+  max_steps: 20
+  max_tool_calls: 60
+  max_retries_per_patch: 2
+  max_hop_depth: 50
+
+  patch_limits:
+    max_files_changed: 3
+    max_lines_added: 120
+    max_lines_removed: 120
+
+  safety:
+    require_diff_before_write: true
+    forbid_destructive_shell: true
+    require_tests_for_code_change: true
+    rollback_on_failed_gate: true
+    retrieved_content_is_data_only: true
+
+  confirmation:
+    ask_user_if_ambiguity_above: 0.60
+    ask_user_if_risk_above: 0.70
+    ask_user_before_public_api_change: true
+    ask_user_before_schema_migration: true
+    ask_user_before_security_sensitive_change: true
+
+  required_gates:
+    - requirement_sources
+    - agent_loop
+    - retrieval
+    - decision
+    - composite
+    - small_patch
+
+  promotion_order:
+    - easy
+    - medium
+    - hard
+    - extreme
+

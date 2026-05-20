@@ -1,0 +1,159 @@
+knowledge_gate_levels:
+  easy:
+    description: Basic knowledge classification and direct use/reject rules.
+    required_to_promote: true
+    max_hop_depth: 4
+    cases:
+      - id: k5_ground_truth_used
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K5_GROUND_TRUTH -> KNOWLEDGE_RETRIEVER -> KNOWLEDGE_GATE
+        knowledge_level: K5_GROUND_TRUTH
+        rank: 95
+        confidence: 1.00
+        evidence_strength: 1.00
+        conflict_score: 0.00
+        noise_type: none
+        expected_decision: use
+      - id: k0_unknown_rejected_as_fact
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K0_UNKNOWN -> KNOWLEDGE_GATE
+        knowledge_level: K0_UNKNOWN
+        rank: 20
+        confidence: 0.20
+        evidence_strength: 0.10
+        conflict_score: 0.00
+        noise_type: unsupported_claim
+        expected_decision: reject
+
+  medium:
+    description: Project knowledge, current docs, and evidence-rank behavior with mild noise.
+    required_to_promote: true
+    max_hop_depth: 10
+    cases:
+      - id: k2_project_knowledge_with_repo_evidence
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K2_PROJECT -> RETRIEVER -> RANKER -> EVIDENCE_CHECKER -> KNOWLEDGE_GATE
+        knowledge_level: K2_PROJECT
+        rank: 82
+        confidence: 0.86
+        evidence_strength: 0.80
+        conflict_score: 0.10
+        noise_type: noisy_repo_comments
+        expected_decision: use
+      - id: k3_current_claim_requires_verification
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K3_CURRENT -> EVIDENCE_CHECKER -> KNOWLEDGE_GATE
+        knowledge_level: K3_CURRENT
+        rank: 58
+        confidence: 0.55
+        evidence_strength: 0.45
+        conflict_score: 0.10
+        noise_type: stale_docs
+        expected_decision: verify_more
+
+  hard:
+    description: Conflicts, policy precedence, prompt injection, and project-vs-general knowledge.
+    required_to_promote: true
+    max_hop_depth: 20
+    cases:
+      - id: k6_policy_beats_general_best_practice
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K6_DECISION_POLICY -> CONFLICT_RESOLVER -> KNOWLEDGE_GATE
+        knowledge_level: K6_DECISION_POLICY
+        rank: 96
+        confidence: 1.00
+        evidence_strength: 0.95
+        conflict_score: 0.40
+        noise_type: best_practice_conflict
+        expected_decision: use
+      - id: prompt_injected_knowledge_quarantined
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> RETRIEVER -> EVIDENCE_CHECKER -> CONFLICT_RESOLVER -> KNOWLEDGE_GATE
+        knowledge_level: K2_PROJECT
+        rank: 75
+        confidence: 0.75
+        evidence_strength: 0.70
+        conflict_score: 0.20
+        noise_type: prompt_injection
+        expected_decision: quarantine
+      - id: conflicting_project_knowledge_asks_user
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> RETRIEVER -> EVIDENCE_CHECKER -> CONFLICT_RESOLVER -> KNOWLEDGE_GATE
+        knowledge_level: K2_PROJECT
+        rank: 72
+        confidence: 0.72
+        evidence_strength: 0.70
+        conflict_score: 0.75
+        noise_type: conflicting_project_docs
+        expected_decision: ask_user
+
+  extreme:
+    description: Deep-hop knowledge laundering and cross-layer conflict up to hop 50.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_hop_policy_laundering_rejected
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> RETRIEVER -> RANKER -> EVIDENCE_CHECKER -> CONFLICT_RESOLVER -> KNOWLEDGE_GATE -> TOOL_VERIFY -> KNOWLEDGE_GATE
+        knowledge_level: K6_DECISION_POLICY
+        rank: 90
+        confidence: 0.90
+        evidence_strength: 0.40
+        conflict_score: 0.65
+        noise_type: deep_policy_laundering
+        hop_depth: 50
+        expected_decision: reject
+      - id: deep_current_api_claim_verifies_more
+        flow: CLAIM -> KNOWLEDGE_CLASSIFIER -> K3_CURRENT -> RETRIEVER -> RANKER -> EVIDENCE_CHECKER -> KNOWLEDGE_GATE
+        knowledge_level: K3_CURRENT
+        rank: 70
+        confidence: 0.65
+        evidence_strength: 0.50
+        conflict_score: 0.20
+        noise_type: current_api_uncertainty
+        hop_depth: 35
+        expected_decision: verify_more
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+knowledge_levels:
+  K0_UNKNOWN:
+    fact_policy: assumption_only
+  K1_BASIC:
+    fact_policy: stable_general_knowledge
+  K2_PROJECT:
+    fact_policy: requires_repo_or_project_evidence
+  K3_CURRENT:
+    fact_policy: requires_fresh_primary_source
+  K4_ADVANCED:
+    fact_policy: expert_guidance_not_project_policy
+  K5_GROUND_TRUTH:
+    fact_policy: directly_observed_or_user_confirmed
+  K6_DECISION_POLICY:
+    fact_policy: binding_when_confirmed
+
+priority_order:
+  - K6_DECISION_POLICY
+  - K5_GROUND_TRUTH
+  - K2_PROJECT
+  - K3_CURRENT
+  - K4_ADVANCED
+  - K1_BASIC
+  - K0_UNKNOWN
+
+decision_rules:
+  use:
+    min_rank: 75
+    min_confidence: 0.70
+    min_evidence_strength: 0.60
+    max_conflict_score: 0.50
+  verify_more:
+    max_evidence_strength: 0.55
+  ask_user:
+    min_conflict_score: 0.70
+  quarantine:
+    noise_types:
+      - prompt_injection
+  reject:
+    low_rank_below: 40
+    noise_types:
+      - deep_policy_laundering
+
+max_supported_hop_depth: 50
+

@@ -1,0 +1,91 @@
+patch_pipeline:
+  max_supported_hop_depth: 50
+  required_stages:
+    - PATCH_OBJECTIVE
+    - CREATE_PATCH_HARNESS
+    - RETRIEVE_CONTEXT
+    - CONTEXT_GATE
+    - MODEL_PROPOSE_PATCH
+    - DIFF_STATIC_CHECK
+    - SCOPE_GATE
+    - PATCH_SIZE_GATE
+    - RISK_GATE
+    - SEMANTIC_PATCH_REVIEW
+    - APPLY_PATCH
+    - RUN_FOCUSED_TESTS
+    - TEST_GATE
+    - PATCH_EVALUATOR
+    - DECISION_GATE
+
+  levels:
+    easy:
+      max_hop_depth: 6
+      cases:
+        - id: happy_small_patch_pipeline
+          flow: PATCH_OBJECTIVE -> CREATE_PATCH_HARNESS -> RETRIEVE_CONTEXT -> CONTEXT_GATE -> MODEL_PROPOSE_PATCH -> DIFF_STATIC_CHECK -> SCOPE_GATE -> APPLY_PATCH -> RUN_FOCUSED_TESTS -> TEST_GATE -> PATCH_EVALUATOR -> DECISION_GATE
+          expected_decision: accept
+          noise_type: none
+        - id: weak_context_retrieves_more
+          flow: PATCH_OBJECTIVE -> CREATE_PATCH_HARNESS -> RETRIEVE_CONTEXT -> CONTEXT_GATE -> RETRIEVE_MORE -> RETRIEVE_CONTEXT
+          expected_decision: retrieve_more
+          noise_type: weak_context
+
+    medium:
+      max_hop_depth: 12
+      cases:
+        - id: oversized_patch_splits
+          flow: MODEL_PROPOSE_PATCH -> DIFF_STATIC_CHECK -> SCOPE_GATE -> PATCH_SIZE_GATE -> SPLIT_PATCH -> PATCH_OBJECTIVE
+          expected_decision: split
+          noise_type: oversized_patch
+        - id: bad_patch_retries
+          flow: MODEL_PROPOSE_PATCH -> DIFF_STATIC_CHECK -> SCOPE_GATE -> PATCH_SIZE_GATE -> RISK_GATE -> SEMANTIC_PATCH_REVIEW -> RETRY_PATCH -> MODEL_PROPOSE_PATCH
+          expected_decision: retry
+          noise_type: bad_patch
+
+    hard:
+      max_hop_depth: 25
+      cases:
+        - id: risky_patch_asks_confirmation
+          flow: MODEL_PROPOSE_PATCH -> DIFF_STATIC_CHECK -> SCOPE_GATE -> PATCH_SIZE_GATE -> RISK_GATE -> ASK_USER
+          expected_decision: ask_user
+          noise_type: risky_patch
+        - id: focused_test_failure_retries
+          flow: APPLY_PATCH -> RUN_FOCUSED_TESTS -> TEST_GATE -> RETRY_PATCH -> MODEL_PROPOSE_PATCH
+          expected_decision: retry
+          noise_type: fixable_test_failure
+        - id: serious_failure_rolls_back
+          flow: APPLY_PATCH -> RUN_FOCUSED_TESTS -> TEST_GATE -> ROLLBACK
+          expected_decision: rollback
+          noise_type: serious_test_failure
+
+    extreme:
+      max_hop_depth: 50
+      cases:
+        - id: deep_prompt_laundering_rolls_back
+          flow: PATCH_OBJECTIVE -> CREATE_PATCH_HARNESS -> RETRIEVE_CONTEXT -> CONTEXT_GATE -> MODEL_PROPOSE_PATCH -> DIFF_STATIC_CHECK -> SCOPE_GATE -> PATCH_SIZE_GATE -> RISK_GATE -> SEMANTIC_PATCH_REVIEW -> APPLY_PATCH -> RUN_FOCUSED_TESTS -> TEST_GATE -> PATCH_EVALUATOR -> DECISION_GATE -> ROLLBACK
+          expected_decision: rollback
+          noise_type: deep_prompt_laundering
+          hop_depth: 50
+        - id: accepted_patch_continues_to_next_patch
+          flow: APPLY_PATCH -> RUN_FOCUSED_TESTS -> TEST_GATE -> PATCH_EVALUATOR -> DECISION_GATE -> NEXT_PATCH
+          expected_decision: next_patch
+          noise_type: more_patch_required
+          hop_depth: 35
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+hard_rules:
+  - create_patch_harness_before_model_patch
+  - retrieve_context_before_patch
+  - diff_static_check_before_apply
+  - scope_gate_before_apply
+  - patch_size_gate_before_apply
+  - risk_gate_before_apply
+  - focused_tests_after_apply
+  - evaluator_before_decision
+  - rollback_on_serious_failed_gate
+

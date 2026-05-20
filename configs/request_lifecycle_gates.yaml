@@ -1,0 +1,111 @@
+request_lifecycle_gate_levels:
+  easy:
+    description: Basic request lifecycle happy path and confirmation branch.
+    required_to_promote: true
+    max_hop_depth: 6
+    cases:
+      - id: happy_lifecycle_final_answer
+        flow: USER -> GATEWAY -> AGENT_LOOP -> KNOWLEDGE -> RETRIEVER -> MODEL -> GATE -> TOOLS -> EVALUATOR -> DECISION_GATE -> FINAL_ANSWER
+        conflict_type: none
+        expected_decision: final_answer
+      - id: lifecycle_needs_confirmation
+        flow: USER -> GATEWAY -> AGENT_LOOP -> DECISION_GATE -> CONFIRMATION -> USER
+        conflict_type: ambiguity
+        expected_decision: ask_user
+
+  medium:
+    description: Retry branch and evidence conflict branch across lifecycle modules.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: evaluator_retry_returns_to_agent_loop
+        flow: USER -> GATEWAY -> AGENT_LOOP -> TOOLS -> EVALUATOR -> DECISION_GATE -> RETRY -> AGENT_LOOP
+        conflict_type: fixable_failure
+        expected_decision: retry
+      - id: knowledge_retriever_conflict_asks_user
+        flow: USER -> GATEWAY -> AGENT_LOOP -> KNOWLEDGE -> RETRIEVER -> EVIDENCE_RANK -> DECISION_GATE -> CONFIRMATION
+        conflict_type: knowledge_retrieval_conflict
+        expected_decision: ask_user
+
+  hard:
+    description: Tool, security, memory, and patch lifecycle conflicts.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: tool_policy_conflict_quarantines
+        flow: USER -> GATEWAY -> AGENT_LOOP -> MODEL -> TOOL_RUNTIME -> SECURITY_GATE -> DECISION_GATE
+        conflict_type: tool_policy_override
+        expected_decision: quarantine
+      - id: memory_patch_test_conflict_rolls_back
+        flow: USER -> GATEWAY -> AGENT_LOOP -> MEMORY -> PATCH_PIPELINE -> TOOLS -> EVALUATOR -> DECISION_GATE -> ROLLBACK
+        conflict_type: patch_claim_vs_test_failure
+        expected_decision: rollback
+      - id: outbox_duplicate_conflict_dispatch_once
+        flow: USER -> GATEWAY -> AGENT_LOOP -> DECISION_GATE -> OUTBOX -> DISPATCHER -> AUDIT
+        conflict_type: duplicate_side_effect
+        expected_decision: dispatch_once
+
+  extreme:
+    description: Deep request lifecycle conflicts with multi-instance unresolved branches up to hop 50.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_lifecycle_no_one_right_asks_user
+        flow: USER -> GATEWAY -> AGENT_LOOP -> KNOWLEDGE -> RETRIEVER -> MEMORY -> TOOL_RUNTIME -> EVIDENCE_RANK -> EVALUATOR -> DECISION_GATE -> CONFIRMATION -> USER
+        conflict_type: unresolved_equivalence_class
+        hop_depth: 50
+        expected_decision: ask_user
+      - id: deep_lifecycle_all_paths_invalid_stops
+        flow: USER -> GATEWAY -> AGENT_LOOP -> MODEL -> TOOL_RUNTIME -> SECURITY_GATE -> PATCH_PIPELINE -> EVALUATOR -> DECISION_GATE -> STOP
+        conflict_type: all_paths_invalid
+        hop_depth: 50
+        expected_decision: stop
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+lifecycle_modules:
+  - USER
+  - GATEWAY
+  - AGENT_LOOP
+  - KNOWLEDGE
+  - RETRIEVER
+  - MEMORY
+  - MODEL
+  - GATE
+  - TOOL_RUNTIME
+  - SECURITY_GATE
+  - TOOLS
+  - EVIDENCE_RANK
+  - EVALUATOR
+  - DECISION_GATE
+  - CONFIRMATION
+  - OUTBOX
+  - DISPATCHER
+  - AUDIT
+  - PATCH_PIPELINE
+  - FINAL_ANSWER
+  - RETRY
+  - ROLLBACK
+  - STOP
+
+conflict_bridge:
+  ask_user:
+    - ambiguity
+    - knowledge_retrieval_conflict
+    - unresolved_equivalence_class
+  retry:
+    - fixable_failure
+  quarantine:
+    - tool_policy_override
+  rollback:
+    - patch_claim_vs_test_failure
+  dispatch_once:
+    - duplicate_side_effect
+  stop:
+    - all_paths_invalid
+
+max_supported_hop_depth: 50

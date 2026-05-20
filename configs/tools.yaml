@@ -1,0 +1,205 @@
+tools:
+  notion.fetch:
+    side_effect_level: read
+    default_urls:
+      - https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e
+      - https://www.notion.so/365b38678ea581f1876ae3459ec1f686
+      - https://www.notion.so/365b38678ea581c2bbcbf79d42a9c1f2
+      - https://www.notion.so/366b38678ea581629d45fb6a245eacd9
+    timeout_seconds: 20
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  web_search:
+    providers:
+      default: duckduckgo
+      allowed:
+        - duckduckgo
+        - bing
+    network: true
+    side_effect_level: network
+    timeout_seconds: 15
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+    policy:
+      retrieved_content_is_data_only: true
+      no_local_file_access: true
+      no_secret_access: true
+      cite_source_url_required: true
+
+  requirements.extract:
+    side_effect_level: none
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  requirements.read:
+    side_effect_level: read
+    timeout_seconds: 5
+    audit_required: false
+    approval_required: false
+    risk_level: low
+
+  acceptance_criteria.write:
+    side_effect_level: write
+    timeout_seconds: 5
+    allowed_roots:
+      - sqlite/tasks.db
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  test.discover:
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  harness.create_pytest:
+    side_effect_level: write
+    timeout_seconds: 10
+    allowed_roots:
+      - tests
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  harness.map_criteria:
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  harness.run_focused:
+    side_effect_level: process
+    timeout_seconds: 60
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  shell.rg_files:
+    command:
+      - rg
+      - --files
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  shell.rg_search:
+    command:
+      - rg
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  filesystem.patch:
+    side_effect_level: write
+    timeout_seconds: 10
+    allowed_roots:
+      - workspace
+    audit_required: true
+    approval_required: false
+    risk_level: high
+
+  git.status:
+    command:
+      - git
+      - status
+      - --short
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: false
+    approval_required: false
+    risk_level: low
+
+  git.diff:
+    command:
+      - git
+      - diff
+      - --
+    side_effect_level: read
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  test.pytest:
+    command:
+      - pytest
+    side_effect_level: process
+    timeout_seconds: 120
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  test.harness:
+    command:
+      - pytest
+      - tests/harness
+    side_effect_level: process
+    timeout_seconds: 60
+    audit_required: true
+    approval_required: false
+    risk_level: low
+
+  test.ruff:
+    command:
+      - ruff
+      - check
+    side_effect_level: process
+    timeout_seconds: 60
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  test.mypy:
+    command:
+      - mypy
+      - ai_local
+      - tests
+    side_effect_level: process
+    timeout_seconds: 120
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  test.npm:
+    command:
+      - npm
+      - test
+    enabled_if_path_exists: package.json
+    side_effect_level: process
+    timeout_seconds: 120
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  evaluator.score_patch:
+    side_effect_level: none
+    timeout_seconds: 10
+    audit_required: true
+    approval_required: false
+    risk_level: medium
+
+  confirmation.create:
+    side_effect_level: write
+    timeout_seconds: 5
+    audit_required: true
+    approval_required: false
+    risk_level: high
+
+  tasks.update:
+    side_effect_level: write
+    timeout_seconds: 5
+    audit_required: true
+    approval_required: false
+    risk_level: medium

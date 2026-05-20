@@ -1,0 +1,37 @@
+[project]
+name = "ai-local"
+version = "0.1.0"
+description = "Local AI infrastructure built with Python and FastAPI"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "SQLAlchemy>=2.0",
+  "PyYAML>=6.0",
+  "typer>=0.12",
+  "tree-sitter>=0.22",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "types-PyYAML>=6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["ai_local*"]

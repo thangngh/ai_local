@@ -1,0 +1,120 @@
+thread_control_gate_levels:
+  easy:
+    description: Basic thread state transitions and direct user authority.
+    required_to_promote: true
+    max_hop_depth: 6
+    cases:
+      - id: user_pause_sets_thread_paused
+        flow: USER -> GATEWAY -> THREAD_CONTROL -> AUDIT
+        control_event: pause
+        authority: current_user
+        conflict_type: none
+        expected_decision: pause_thread
+      - id: user_resume_continues_latest_context
+        flow: USER -> GATEWAY -> THREAD_CONTROL -> AGENT_LOOP
+        control_event: resume
+        authority: current_user
+        conflict_type: none
+        expected_decision: resume_thread
+
+  medium:
+    description: Interrupt and duplicate side-effect protection across queue and outbox.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: newer_user_interrupt_supersedes_old_work
+        flow: USER -> GATEWAY -> THREAD_CONTROL -> QUEUE -> AGENT_LOOP -> DECISION_GATE
+        control_event: interrupt
+        authority: current_user
+        conflict_type: stale_context
+        expected_decision: supersede_old_thread_step
+      - id: resumed_thread_does_not_dispatch_duplicate_outbox
+        flow: USER -> GATEWAY -> THREAD_CONTROL -> MEMORY -> OUTBOX -> DISPATCHER -> AUDIT
+        control_event: resume
+        authority: current_user
+        conflict_type: duplicate_side_effect
+        expected_decision: dispatch_once
+
+  hard:
+    description: Multi-module conflicts between thread state, tools, memory, and prompt injection.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: retrieved_doc_cannot_archive_thread
+        flow: USER -> GATEWAY -> RETRIEVER -> PROMPT_INJECTION_GATE -> THREAD_CONTROL -> DECISION_GATE
+        control_event: archive
+        authority: retrieved_content
+        conflict_type: prompt_injection_control
+        expected_decision: refuse_control_event
+      - id: tool_request_cannot_resume_cancelled_thread
+        flow: USER -> GATEWAY -> TOOL_RUNTIME -> THREAD_CONTROL -> MEMORY -> DECISION_GATE
+        control_event: resume
+        authority: tool_output
+        conflict_type: invalid_thread_state
+        expected_decision: stop
+      - id: memory_snapshot_conflict_requires_confirmation
+        flow: USER -> GATEWAY -> MEMORY -> THREAD_CONTROL -> EVIDENCE_RANK -> CONFIRMATION
+        control_event: resume
+        authority: memory_snapshot
+        conflict_type: stale_memory_vs_current_user
+        expected_decision: ask_user
+
+  extreme:
+    description: Deep-hop thread control conflicts where no module has enough authority alone.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_multi_instance_thread_conflict_asks_user
+        flow: USER -> GATEWAY -> AGENT_LOOP -> MEMORY -> RETRIEVER -> TOOL_RUNTIME -> QUEUE -> OUTBOX -> EVIDENCE_RANK -> DECISION_GATE -> THREAD_CONTROL -> CONFIRMATION
+        control_event: interrupt
+        authority: mixed_instances
+        conflict_type: unresolved_equivalence_class
+        hop_depth: 50
+        expected_decision: ask_user
+      - id: deep_no_safe_thread_path_stops
+        flow: USER -> GATEWAY -> AGENT_LOOP -> PROMPT_INJECTION_GATE -> TOOL_RUNTIME -> THREAD_CONTROL -> MEMORY -> QUEUE -> OUTBOX -> EVALUATOR -> DECISION_GATE -> STOP
+        control_event: resume
+        authority: mixed_instances
+        conflict_type: all_paths_invalid
+        hop_depth: 50
+        expected_decision: stop
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+thread_control_modules:
+  - USER
+  - GATEWAY
+  - THREAD_CONTROL
+  - AGENT_LOOP
+  - PLANNER
+  - MEMORY
+  - RETRIEVER
+  - PROMPT_INJECTION_GATE
+  - TOOL_RUNTIME
+  - QUEUE
+  - OUTBOX
+  - DISPATCHER
+  - AUDIT
+  - EVIDENCE_RANK
+  - EVALUATOR
+  - DECISION_GATE
+  - CONFIRMATION
+  - STOP
+
+authority_policy:
+  current_user:
+    can_control_thread: true
+  retrieved_content:
+    can_control_thread: false
+  tool_output:
+    can_control_thread: false
+  memory_snapshot:
+    can_control_thread: false
+  mixed_instances:
+    can_control_thread: false
+
+max_supported_hop_depth: 50

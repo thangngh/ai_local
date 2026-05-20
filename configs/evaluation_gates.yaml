@@ -1,0 +1,142 @@
+evaluation_gate_levels:
+  easy:
+    description: Basic score aggregation and accept/retry thresholds.
+    required_to_promote: true
+    max_hop_depth: 3
+    cases:
+      - id: high_score_low_risk_accepts
+        correctness: 0.95
+        completeness: 0.95
+        evidence_quality: 0.95
+        requirement_match: 0.95
+        test_status: 1.00
+        ambiguity: 0.10
+        risk: 0.10
+        expected_band: accept
+      - id: medium_score_retries
+        correctness: 0.85
+        completeness: 0.85
+        evidence_quality: 0.80
+        requirement_match: 0.80
+        test_status: 0.80
+        ambiguity: 0.20
+        risk: 0.20
+        expected_band: retry
+
+  medium:
+    description: Missing evidence, failed tests, ambiguity, and requirement mismatch.
+    required_to_promote: true
+    max_hop_depth: 8
+    cases:
+      - id: no_test_blocks_confident_accept
+        correctness: 0.95
+        completeness: 0.90
+        evidence_quality: 0.80
+        requirement_match: 0.90
+        test_status: 0.00
+        ambiguity: 0.10
+        risk: 0.20
+        expected_band: retry
+      - id: high_ambiguity_asks_user
+        correctness: 0.90
+        completeness: 0.90
+        evidence_quality: 0.90
+        requirement_match: 0.90
+        test_status: 1.00
+        ambiguity: 0.75
+        risk: 0.20
+        expected_band: ask_user
+
+  hard:
+    description: Risk, conflicting evidence, and unsafe patch evaluation.
+    required_to_promote: true
+    max_hop_depth: 20
+    cases:
+      - id: high_risk_stops_even_with_good_score
+        correctness: 0.95
+        completeness: 0.95
+        evidence_quality: 0.95
+        requirement_match: 0.95
+        test_status: 1.00
+        ambiguity: 0.10
+        risk: 0.90
+        expected_band: stop
+      - id: weak_evidence_verifies_before_use
+        correctness: 0.85
+        completeness: 0.85
+        evidence_quality: 0.30
+        requirement_match: 0.80
+        test_status: 1.00
+        ambiguity: 0.20
+        risk: 0.30
+        expected_band: verify
+      - id: requirement_mismatch_retries
+        correctness: 0.90
+        completeness: 0.90
+        evidence_quality: 0.80
+        requirement_match: 0.30
+        test_status: 1.00
+        ambiguity: 0.20
+        risk: 0.30
+        expected_band: retry
+
+  extreme:
+    description: Deep-hop noisy evaluation chains where score laundering must not bypass risk/evidence gates.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_hop_score_laundering_stops
+        correctness: 0.99
+        completeness: 0.99
+        evidence_quality: 0.95
+        requirement_match: 0.99
+        test_status: 1.00
+        ambiguity: 0.20
+        risk: 0.92
+        hop_depth: 50
+        noise_type: score_laundering
+        expected_band: stop
+      - id: deep_hop_conflicting_evidence_asks_user
+        correctness: 0.80
+        completeness: 0.80
+        evidence_quality: 0.45
+        requirement_match: 0.75
+        test_status: 0.80
+        ambiguity: 0.70
+        risk: 0.55
+        hop_depth: 42
+        noise_type: conflicting_evidence
+        expected_band: ask_user
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+score_formula:
+  correctness: 0.25
+  completeness: 0.20
+  evidence_quality: 0.20
+  requirement_match: 0.15
+  test_status: 0.10
+  ambiguity_penalty: -0.10
+  risk_penalty: -0.10
+
+decision_thresholds:
+  accept:
+    min_score: 0.80
+    max_risk: 0.50
+    max_ambiguity: 0.60
+    min_evidence_quality: 0.60
+    min_test_status: 0.50
+  retry:
+    min_score: 0.60
+  verify:
+    max_evidence_quality: 0.40
+  ask_user:
+    min_ambiguity: 0.60
+  stop:
+    min_risk: 0.85
+
+max_supported_hop_depth: 50

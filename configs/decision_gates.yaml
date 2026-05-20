@@ -1,0 +1,123 @@
+decision_gate_levels:
+  easy:
+    description: Basic decision outcomes from score, ambiguity, risk, and retry count.
+    required_to_promote: true
+    max_hop_depth: 2
+    cases:
+      - id: accept_high_score_low_risk
+        flow: score -> decision
+        score: 0.90
+        risk: 0.10
+        ambiguity: 0.10
+        retries: 0
+        expected_decision: accept
+      - id: ask_user_on_high_ambiguity
+        flow: ambiguity -> decision
+        score: 0.85
+        risk: 0.20
+        ambiguity: 0.75
+        retries: 0
+        expected_decision: ask_user
+
+  medium:
+    description: Combined evidence, score, test status, retry, and risk decisions.
+    required_to_promote: true
+    max_hop_depth: 5
+    cases:
+      - id: retry_medium_score_with_budget
+        flow: evidence -> score -> decision
+        score: 0.70
+        risk: 0.20
+        ambiguity: 0.20
+        retries: 1
+        expected_decision: retry
+      - id: ask_user_when_retry_budget_exhausted
+        flow: evidence -> score -> retry_budget -> decision
+        score: 0.70
+        risk: 0.20
+        ambiguity: 0.20
+        retries: 2
+        expected_decision: ask_user
+
+  hard:
+    description: Security, tool policy, memory conflict, and outbox side-effect decision flows.
+    required_to_promote: true
+    max_hop_depth: 10
+    cases:
+      - id: stop_on_unsafe_risk
+        flow: risk -> security -> decision
+        score: 0.95
+        risk: 0.90
+        ambiguity: 0.10
+        retries: 0
+        expected_decision: stop
+      - id: quarantine_tool_policy_override
+        flow: retrieval -> prompt_firewall -> tool_policy -> decision
+        score: 0.80
+        risk: 0.72
+        ambiguity: 0.30
+        retries: 0
+        security_signal: tool_policy_override
+        expected_decision: quarantine
+      - id: verify_memory_conflict_before_decision
+        flow: memory -> retrieval -> conflict -> decision
+        score: 0.82
+        risk: 0.35
+        ambiguity: 0.40
+        retries: 0
+        security_signal: memory_conflict
+        expected_decision: verify
+
+  extreme:
+    description: Deep-hop noisy decision chains up to hop 20.
+    required_to_promote: false
+    max_hop_depth: 20
+    cases:
+      - id: deep_hop_policy_shadowing_stops
+        flow: task -> patch -> gate -> evidence -> score -> risk -> decision -> security -> memory -> outbox
+        score: 0.92
+        risk: 0.88
+        ambiguity: 0.55
+        retries: 1
+        security_signal: deep_policy_shadowing
+        hop_depth: 20
+        expected_decision: stop
+      - id: laundered_high_score_requires_security_check
+        flow: docs -> memory -> retrieval -> evidence -> score -> risk -> decision
+        score: 0.91
+        risk: 0.68
+        ambiguity: 0.35
+        retries: 0
+        security_signal: laundered_evidence
+        hop_depth: 18
+        expected_decision: ask_user
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+decision_policy:
+  accept:
+    when: final_score >= 0.80 and risk < 0.50 and ambiguity <= 0.60
+  retry:
+    when: final_score >= 0.60 and final_score < 0.80 and retry_count < 2
+  ask_user:
+    when:
+      - ambiguity > 0.60
+      - retry_count >= 2
+      - security_signal in [laundered_evidence]
+  verify:
+    when:
+      - security_signal in [memory_conflict]
+  quarantine:
+    when:
+      - security_signal in [tool_policy_override]
+  stop:
+    when:
+      - risk > 0.85
+      - security_signal in [deep_policy_shadowing]
+
+max_supported_hop_depth: 20
+

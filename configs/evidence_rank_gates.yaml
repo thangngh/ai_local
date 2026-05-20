@@ -1,0 +1,153 @@
+evidence_rank_gate_levels:
+  easy:
+    description: Basic evidence rank bands and direct source authority.
+    required_to_promote: true
+    max_hop_depth: 4
+    cases:
+      - id: canonical_user_confirmation
+        source_authority: 30
+        evidence_strength: 25
+        freshness: 15
+        project_relevance: 15
+        confirmation_weight: 15
+        conflict_penalty: 0
+        staleness_penalty: 0
+        noise_type: none
+        expected_band: canonical
+      - id: weak_unknown_source_rejected
+        source_authority: 5
+        evidence_strength: 5
+        freshness: 5
+        project_relevance: 5
+        confirmation_weight: 0
+        conflict_penalty: 10
+        staleness_penalty: 10
+        noise_type: unknown_source
+        expected_band: reject
+
+  medium:
+    description: Project evidence, freshness, and stale docs penalties under moderate noise.
+    required_to_promote: true
+    max_hop_depth: 10
+    cases:
+      - id: project_code_evidence_strong
+        source_authority: 24
+        evidence_strength: 22
+        freshness: 12
+        project_relevance: 15
+        confirmation_weight: 5
+        conflict_penalty: 0
+        staleness_penalty: 0
+        noise_type: noisy_comments
+        expected_band: strong
+      - id: stale_doc_drops_to_weak
+        source_authority: 20
+        evidence_strength: 18
+        freshness: 8
+        project_relevance: 12
+        confirmation_weight: 0
+        conflict_penalty: 5
+        staleness_penalty: 10
+        noise_type: stale_docs
+        expected_band: weak
+
+  hard:
+    description: Conflict penalties, prompt injection, and source laundering.
+    required_to_promote: true
+    max_hop_depth: 25
+    cases:
+      - id: conflict_penalty_requires_verify
+        source_authority: 25
+        evidence_strength: 22
+        freshness: 12
+        project_relevance: 15
+        confirmation_weight: 10
+        conflict_penalty: 30
+        staleness_penalty: 0
+        noise_type: conflicting_sources
+        expected_band: weak
+      - id: prompt_injection_rejected_even_with_rank
+        source_authority: 28
+        evidence_strength: 25
+        freshness: 15
+        project_relevance: 15
+        confirmation_weight: 10
+        conflict_penalty: 0
+        staleness_penalty: 0
+        noise_type: prompt_injection
+        expected_band: reject
+      - id: laundered_policy_claim_rejected
+        source_authority: 26
+        evidence_strength: 20
+        freshness: 12
+        project_relevance: 12
+        confirmation_weight: 10
+        conflict_penalty: 10
+        staleness_penalty: 0
+        noise_type: policy_laundering
+        expected_band: reject
+
+  extreme:
+    description: Deep-hop evidence laundering and rank inflation up to hop 50.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_hop_repetition_does_not_increase_authority
+        source_authority: 8
+        evidence_strength: 10
+        freshness: 10
+        project_relevance: 10
+        confirmation_weight: 0
+        conflict_penalty: 5
+        staleness_penalty: 0
+        noise_type: repeated_untrusted_claim
+        hop_depth: 50
+        expected_band: reject
+      - id: deep_hop_confirmed_policy_stays_canonical
+        source_authority: 30
+        evidence_strength: 25
+        freshness: 15
+        project_relevance: 15
+        confirmation_weight: 15
+        conflict_penalty: 0
+        staleness_penalty: 0
+        noise_type: deep_context_noise
+        hop_depth: 42
+        expected_band: canonical
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+rank_formula:
+  source_authority: 1
+  evidence_strength: 1
+  freshness: 1
+  project_relevance: 1
+  confirmation_weight: 1
+  conflict_penalty: -1
+  staleness_penalty: -1
+
+rank_bands:
+  canonical:
+    min_rank: 90
+  strong:
+    min_rank: 75
+    max_rank: 89
+  caution:
+    min_rank: 60
+    max_rank: 74
+  weak:
+    min_rank: 40
+    max_rank: 59
+  reject:
+    max_rank: 39
+
+hard_reject_noise:
+  - prompt_injection
+  - policy_laundering
+  - repeated_untrusted_claim
+
+max_supported_hop_depth: 50

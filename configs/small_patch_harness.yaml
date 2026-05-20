@@ -1,0 +1,75 @@
+small_patch_harness:
+  defaults:
+    max_files_changed: 2
+    max_changed_lines: 100
+    max_functions_changed: 3
+    max_new_dependencies: 0
+    forbid_schema_change: true
+    forbid_public_api_change: true
+    require_focused_harness: true
+
+  levels:
+    easy:
+      max_files_changed: 1
+      max_changed_lines: 40
+      max_hop_depth: 5
+      required_evidence:
+        - requirement_id
+        - focused_harness_exists
+      required_checks:
+        - test.harness
+
+    medium:
+      max_files_changed: 2
+      max_changed_lines: 100
+      max_hop_depth: 12
+      required_evidence:
+        - requirement_id
+        - acceptance_criteria_map
+        - focused_harness_result
+      required_checks:
+        - test.harness
+        - test.pytest
+
+    hard:
+      max_files_changed: 3
+      max_changed_lines: 180
+      max_hop_depth: 25
+      required_evidence:
+        - requirement_id
+        - acceptance_criteria_map
+        - focused_harness_result
+        - risk_flags
+        - git_diff
+      required_checks:
+        - test.harness
+        - test.pytest
+        - test.ruff
+        - test.mypy
+
+    extreme:
+      max_files_changed: 3
+      max_changed_lines: 240
+      max_hop_depth: 50
+      required_evidence:
+        - requirement_id
+        - acceptance_criteria_map
+        - focused_harness_result
+        - risk_flags
+        - security_decision
+        - rollback_plan
+      required_checks:
+        - test.harness
+        - test.pytest
+        - test.ruff
+        - test.mypy
+        - test.npm
+
+  hard_rules:
+    - no_production_patch_before_harness
+    - allowed_files_only
+    - no_dependency_change_without_confirmation
+    - no_schema_change_without_confirmation
+    - no_public_api_change_without_confirmation
+    - rollback_on_failed_gate
+

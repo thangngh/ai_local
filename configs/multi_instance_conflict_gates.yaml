@@ -1,0 +1,172 @@
+multi_instance_conflict_levels:
+  easy:
+    description: Two equivalent instances conflict and neither has stronger evidence.
+    required_to_promote: true
+    max_hop_depth: 8
+    cases:
+      - id: two_equal_requirements_no_resolution
+        modules: [requirements, evidence, decision]
+        instances:
+          - id: req_a
+            evidence_rank: 70
+            risk: 0.30
+            authority: project_doc
+          - id: req_b
+            evidence_rank: 70
+            risk: 0.30
+            authority: project_doc
+        conflict_type: equal_authority_equal_evidence
+        expected_decision: ask_user
+
+  medium:
+    description: Multiple module outputs conflict without enough authority to choose one.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: memory_retrieval_knowledge_tie
+        modules: [memory, retrieval, knowledge, decision]
+        instances:
+          - id: memory_claim
+            evidence_rank: 76
+            risk: 0.35
+            authority: M2_PROJECT_CONVENTION
+          - id: retrieval_claim
+            evidence_rank: 76
+            risk: 0.35
+            authority: K2_PROJECT
+          - id: knowledge_claim
+            evidence_rank: 76
+            risk: 0.35
+            authority: K2_PROJECT
+        conflict_type: multi_instance_tie
+        expected_decision: ask_user
+      - id: patch_gate_and_decision_gate_disagree_without_tests
+        modules: [patch_pipeline, evaluation, decision]
+        instances:
+          - id: patch_gate_accept
+            evidence_rank: 72
+            risk: 0.40
+            authority: patch_gate
+          - id: decision_gate_retry
+            evidence_rank: 72
+            risk: 0.40
+            authority: decision_gate
+        conflict_type: missing_test_evidence
+        expected_decision: defer_until_evidence
+
+  hard:
+    description: Security, memory, tool, and evidence conflicts with no safe valid path.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: tool_memory_security_deadlock
+        modules: [memory, tool_runtime, security, evidence_rank, decision]
+        instances:
+          - id: memory_says_allow_tool
+            evidence_rank: 82
+            risk: 0.70
+            authority: M3_CONFIRMED_DECISION
+          - id: security_says_deny_tool
+            evidence_rank: 82
+            risk: 0.70
+            authority: security_gate
+          - id: evidence_says_uncertain
+            evidence_rank: 82
+            risk: 0.70
+            authority: evidence_rank
+        conflict_type: no_safe_path
+        expected_decision: stop
+      - id: circular_confirmation_conflict
+        modules: [confirmation, memory, decision, audit]
+        instances:
+          - id: old_confirmation_a
+            evidence_rank: 88
+            risk: 0.55
+            authority: K5_GROUND_TRUTH
+          - id: old_confirmation_b
+            evidence_rank: 88
+            risk: 0.55
+            authority: K5_GROUND_TRUTH
+        conflict_type: circular_confirmation
+        expected_decision: ask_user
+
+  extreme:
+    description: Deep-hop multi-instance conflicts where no instance is clearly true or false.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_multi_module_no_one_right_no_one_wrong
+        modules:
+          - requirements
+          - memory
+          - retrieval
+          - knowledge
+          - tool_runtime
+          - evidence_rank
+          - evaluation
+          - decision
+          - confirmation
+          - patch_pipeline
+        hop_depth: 50
+        instances:
+          - id: path_a
+            evidence_rank: 80
+            risk: 0.60
+            authority: mixed_sources
+          - id: path_b
+            evidence_rank: 80
+            risk: 0.60
+            authority: mixed_sources
+          - id: path_c
+            evidence_rank: 80
+            risk: 0.60
+            authority: mixed_sources
+        conflict_type: unresolved_equivalence_class
+        expected_decision: ask_user
+      - id: deep_all_paths_invalid
+        modules:
+          - agent_loop
+          - patch_pipeline
+          - security
+          - tool_runtime
+          - decision
+        hop_depth: 50
+        instances:
+          - id: bypass_gate
+            evidence_rank: 40
+            risk: 0.90
+            authority: untrusted_retrieved_content
+          - id: ignore_security
+            evidence_rank: 40
+            risk: 0.90
+            authority: untrusted_retrieved_content
+          - id: ignore_tests
+            evidence_rank: 40
+            risk: 0.90
+            authority: untrusted_retrieved_content
+        conflict_type: all_paths_invalid
+        expected_decision: stop
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+decision_policy:
+  ask_user:
+    when:
+      - equal_authority_equal_evidence
+      - multi_instance_tie
+      - circular_confirmation
+      - unresolved_equivalence_class
+  defer_until_evidence:
+    when:
+      - missing_test_evidence
+  stop:
+    when:
+      - no_safe_path
+      - all_paths_invalid
+
+max_supported_hop_depth: 50
+
