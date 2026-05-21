@@ -1,0 +1,93 @@
+memory_governance_gate_levels:
+  easy:
+    description: Memory write decisions for evidence and secrets.
+    required_to_promote: true
+    max_hop_depth: 6
+    cases:
+      - id: evidenced_preference_writes_memory
+        flow: MEMORY_CANDIDATE -> WRITE_SCORE -> WRITE_GATE -> MEMORY_STORE
+        scenario: strong_write_candidate
+        expected_decision: accept_memory
+      - id: secret_claim_is_rejected
+        flow: MEMORY_CANDIDATE -> RISK_SCORE -> WRITE_GATE
+        scenario: secret_candidate
+        expected_decision: reject_memory
+
+  medium:
+    description: Retrieval decisions by relevance, risk, freshness, and conflict.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: strong_retrieval_injects_memory
+        flow: MEMORY_STORE -> RETRIEVAL_SCORE -> RETRIEVAL_GATE -> CONTEXT_BUILDER
+        scenario: strong_retrieval
+        expected_decision: inject_memory
+      - id: stale_project_memory_verifies_before_use
+        flow: MEMORY_STORE -> FRESHNESS -> RETRIEVAL_SCORE -> RETRIEVAL_GATE -> TOOL_VERIFY
+        scenario: stale_project_memory
+        expected_decision: verify_before_use
+
+  hard:
+    description: Policy, conflict, and lifecycle governance cases.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: inferred_safety_policy_requests_confirmation
+        flow: MEMORY_CANDIDATE -> WRITE_SCORE -> WRITE_GATE -> CONFIRMATION
+        scenario: inferred_policy_candidate
+        expected_decision: ask_user
+      - id: conflicted_memory_not_injected
+        flow: MEMORY_STORE -> CONFLICT_SCORE -> RETRIEVAL_GATE -> DECISION_GATE
+        scenario: conflicted_memory
+        expected_decision: do_not_use
+      - id: changed_file_hash_demotes_memory
+        flow: MEMORY_STORE -> SOURCE_HASH -> FRESHNESS -> DEMOTION_GATE
+        scenario: source_hash_changed
+        expected_decision: demote_stale
+
+  extreme:
+    description: Deep governance across memory, evidence, confirmation, and scoring.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_new_confirmed_decision_beats_old_inference
+        flow: MEMORY_CANDIDATE -> EVIDENCE -> CONFIDENCE -> WRITE_SCORE -> WRITE_GATE -> MEMORY_STORE -> RETRIEVAL_SCORE -> CONFLICT_SCORE -> DECISION_GATE
+        scenario: newer_confirmed_overrides_inferred
+        hop_depth: 50
+        expected_decision: prefer_confirmed_memory
+      - id: deep_harmful_usage_archives_memory
+        flow: MEMORY_STORE -> CONTEXT_BUILDER -> AGENT_LOOP -> EVALUATOR -> USAGE_OUTCOME -> CONFIDENCE -> RISK_SCORE -> DEMOTION_GATE
+        scenario: harmful_usage_history
+        hop_depth: 50
+        expected_decision: archive_memory
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+memory_governance_modules:
+  - MEMORY_CANDIDATE
+  - WRITE_SCORE
+  - WRITE_GATE
+  - MEMORY_STORE
+  - RISK_SCORE
+  - RETRIEVAL_SCORE
+  - RETRIEVAL_GATE
+  - CONTEXT_BUILDER
+  - FRESHNESS
+  - TOOL_VERIFY
+  - CONFIRMATION
+  - CONFLICT_SCORE
+  - DECISION_GATE
+  - SOURCE_HASH
+  - DEMOTION_GATE
+  - EVIDENCE
+  - CONFIDENCE
+  - AGENT_LOOP
+  - EVALUATOR
+  - USAGE_OUTCOME
+
+source_ref: https://www.notion.so/365b38678ea581c2bbcbf79d42a9c1f2
+max_supported_hop_depth: 50

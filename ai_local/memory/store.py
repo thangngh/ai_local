@@ -11,3 +11,5 @@ class InMemoryMemoryStore:
     def search(self, scope: str) -> list[MemoryItem]:
         return [item for item in self._items if item.scope == scope]
 
+    def active(self, scope: str) -> list[MemoryItem]:
+        return [item for item in self.search(scope) if item.status == "active"]

@@ -20,6 +20,8 @@ class ToolRegistry:
     def get(self, name: str) -> ToolDefinition:
         return self._definitions[name]
 
+    def find(self, name: str) -> ToolDefinition | None:
+        return self._definitions.get(name)
+
     def names(self) -> list[str]:
         return sorted(self._definitions)
-

@@ -1,0 +1,121 @@
+developer_sprints:
+  source_ref: https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e
+  global_harness_config: configs/global_developer_harness.yaml
+  sprints:
+    - id: sprint_01_intake_core
+      phase: phase_1_core_loop
+      objective: Establish request intake, lifecycle, agent loop, and planner decisions.
+      functionals:
+        - id: F-CORE-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli request-lifecycle
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level medium
+          before_gate_summary: Gateway and lifecycle patch is scoped; request states, evidence, and risk branch are identified before code changes.
+          after_gate_summary: Lifecycle gate confirms the patch preserves create, ask, retry, stop, and audit behavior for the covered request paths.
+        - id: F-CORE-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli agent-loop --max-level medium
+            - .\.venv\Scripts\python -m ai_local.cli decision --max-level medium
+          before_gate_summary: Agent loop patch declares the state transition touched and the planner or decision branch it may alter.
+          after_gate_summary: Agent-loop and decision gates show the touched transitions still promote with the expected accept, retry, ask, or stop path.
+
+    - id: sprint_02_runtime_control
+      phase: phase_1_core_loop
+      objective: Add tool runtime control, queue worker flow, thread control, and outbox baseline.
+      functionals:
+        - id: F-CORE-003
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level medium
+            - .\.venv\Scripts\python -m ai_local.cli prompt-injection --max-level medium
+          before_gate_summary: Tool change states the allowlist surface, expected observation, and untrusted input risk before execution code changes.
+          after_gate_summary: Tool and injection gates confirm the tool path stays bounded and retrieved instructions cannot authorize unsafe behavior.
+        - id: F-CORE-004
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli thread-control
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety
+          before_gate_summary: Runtime control patch identifies lock ownership, queue or outbox side effect, and crash or replay risk before implementation.
+          after_gate_summary: Thread and operational gates confirm concurrency, idempotency, approval, and recovery paths remain explicit.
+
+    - id: sprint_03_retrieval_index
+      phase: phase_2_retrieval
+      objective: Build retrieval packaging and indexer MVP inputs.
+      functionals:
+        - id: F-RET-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli retrieval
+            - .\.venv\Scripts\python -m ai_local.cli flow-memory-rating --max-level hard
+          before_gate_summary: Retrieval patch records query type, expected context package, noisy language risk, and decision coupling.
+          after_gate_summary: Retrieval and flow-memory gates show context selection handles noise, scope, evidence, and wrong-flow interference.
+        - id: F-RET-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli retrieval --max-level medium
+            - .\.venv\Scripts\python -m ai_local.cli memory-sql --max-level medium
+          before_gate_summary: Indexer patch identifies source metadata and schema or chunk fields needed by retrieval before storage changes.
+          after_gate_summary: Retrieval and memory SQL gates confirm stored context inputs stay usable and schema-linked memory evidence is preserved.
+
+    - id: sprint_04_patch_harness
+      phase: phase_3_harness
+      objective: Lock patch sizing, evidence, rollback, and global harness behavior.
+      functionals:
+        - id: F-HAR-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli big-harness
+            - .\.venv\Scripts\python -m ai_local.cli small-patch
+            - .\.venv\Scripts\python -m ai_local.cli patch-levels
+          before_gate_summary: Harness patch declares patch size, required evidence, checks, and promotion level before changing harness rules.
+          after_gate_summary: Big, small, and level gates confirm patch limits and promotion constraints remain enforceable.
+        - id: F-HAR-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli composite
+            - .\.venv\Scripts\python -m ai_local.cli conflict-paths --max-level hard
+          before_gate_summary: Patch pipeline work states the objective, evidence chain, rollback condition, and conflict class before edits.
+          after_gate_summary: Pipeline, composite, and conflict gates confirm task-to-patch-to-evidence decisions still choose valid paths only.
+
+    - id: sprint_05_evaluation_decision
+      phase: phase_4_evaluation
+      objective: Implement evaluator output, decision policy, and confirmation manager flow.
+      functionals:
+        - id: F-EVAL-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli evaluation
+            - .\.venv\Scripts\python -m ai_local.cli decision
+            - .\.venv\Scripts\python -m ai_local.cli confirmation
+          before_gate_summary: Evaluation patch records score fields, risk threshold, retry budget, and confirmation trigger before policy changes.
+          after_gate_summary: Evaluation, decision, and confirmation gates show score output routes to accept, retry, ask, or stop as designed.
+
+    - id: sprint_06_knowledge_evidence
+      phase: phase_5_knowledge
+      objective: Implement knowledge cards, evidence rank, and conflict resolver.
+      functionals:
+        - id: F-KNOW-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli knowledge
+            - .\.venv\Scripts\python -m ai_local.cli evidence-rank
+            - .\.venv\Scripts\python -m ai_local.cli multi-conflict --max-level hard
+          before_gate_summary: Knowledge patch names the claim level, evidence authority, rank impact, and conflict expectation before implementation.
+          after_gate_summary: Knowledge, rank, and conflict gates confirm claims remain evidenced and unresolved ties do not become false facts.
+
+    - id: sprint_07_memory_governance
+      phase: phase_5_knowledge
+      objective: Implement memory layers, schema, regression, and governance scoring.
+      functionals:
+        - id: F-KNOW-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli memory-layers
+            - .\.venv\Scripts\python -m ai_local.cli memory-sql
+            - .\.venv\Scripts\python -m ai_local.cli memory-governance
+            - .\.venv\Scripts\python -m ai_local.cli memory-regression
+          before_gate_summary: Memory patch declares scope, evidence, freshness, conflict, and hop-depth risk before schema or retrieval behavior changes.
+          after_gate_summary: Memory gates confirm layer, schema, governance, and regression behavior still preserve safe write and retrieval decisions.
+
+    - id: sprint_08_skills_integration
+      phase: phase_6_skills
+      objective: Implement skill metadata loading and permission-aware workflow integration.
+      functionals:
+        - id: F-SKILL-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level hard
+          before_gate_summary: Skill patch states skill trust, allowed tools, module bridge, and evidence expected from the workflow.
+          after_gate_summary: Skill and tool gates confirm the skill path integrates with permissions and cross-module evidence decisions.

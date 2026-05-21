@@ -1,0 +1,88 @@
+flow_memory_rating_gate_levels:
+  easy:
+    description: Flow-aware memory retrieval and role binding basics.
+    required_to_promote: true
+    max_hop_depth: 6
+    cases:
+      - id: analogy_role_beats_keyword_match
+        flow: USER_INPUT -> STATE_UPDATE -> ROLE_BINDING -> MEMORY_RETRIEVAL -> RERANK
+        scenario: role_bound_analogy
+        expected_decision: select_flow_matched_memory
+      - id: negative_constraint_survives_context_pack
+        flow: MEMORY_RETRIEVAL -> NEGATIVE_CONSTRAINT -> CONTEXT_PACKER -> ANSWER_GATE
+        scenario: negative_constraint
+        expected_decision: preserve_constraint
+
+  medium:
+    description: Regression and evidence decisions after an interrupting branch.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: regression_restores_previous_state
+        flow: USER_INPUT -> STATE_UPDATE -> INTERRUPTING_BRANCH -> STATE_RESTORE -> ANSWER_GATE
+        scenario: restore_state_after_branch
+        expected_decision: restore_active_flow
+      - id: retracted_memory_is_quarantined
+        flow: MEMORY_RETRIEVAL -> EVIDENCE_CHECK -> CONTRADICTION -> RERANK
+        scenario: retracted_memory
+        expected_decision: quarantine_memory
+
+  hard:
+    description: Bilingual memory packing and interference-aware reranking.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: bilingual_memory_keeps_original_evidence
+        flow: LANGUAGE_PARSER -> MEMORY_RETRIEVAL -> BILINGUAL_ALIAS -> EVIDENCE_CHECK -> CONTEXT_PACKER
+        scenario: bilingual_evidence
+        expected_decision: pack_canonical_with_original_evidence
+      - id: interference_downranks_wrong_flow
+        flow: MEMORY_RETRIEVAL -> FLOW_MATCH -> INTERFERENCE_SCORE -> RERANK -> ANSWER_GATE
+        scenario: wrong_flow_interference
+        expected_decision: downrank_interference
+
+  extreme:
+    description: Deep flow-sensitive scoring and context-cost constraints.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_score_prefers_flow_evidence_utility
+        flow: USER_INPUT -> LANGUAGE_PARSER -> STATE_UPDATE -> ROLE_BINDING -> MEMORY_RETRIEVAL -> FLOW_MATCH -> EVIDENCE_CHECK -> UTILITY_SCORE -> INTERFERENCE_SCORE -> MEMORY_SCORE -> CONTEXT_PACKER -> ANSWER_GATE
+        scenario: flow_score_dominates_similarity
+        hop_depth: 50
+        expected_decision: select_high_memory_score
+      - id: deep_token_cost_prunes_low_utility_memory
+        flow: USER_INPUT -> STATE_UPDATE -> MEMORY_RETRIEVAL -> RERANK -> TOKEN_COST -> UTILITY_SCORE -> CONTEXT_PACKER -> ANSWER_GATE
+        scenario: low_utility_token_cost
+        hop_depth: 50
+        expected_decision: prune_memory
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+flow_memory_modules:
+  - USER_INPUT
+  - LANGUAGE_PARSER
+  - STATE_UPDATE
+  - ROLE_BINDING
+  - MEMORY_RETRIEVAL
+  - RERANK
+  - NEGATIVE_CONSTRAINT
+  - CONTEXT_PACKER
+  - ANSWER_GATE
+  - INTERRUPTING_BRANCH
+  - STATE_RESTORE
+  - EVIDENCE_CHECK
+  - CONTRADICTION
+  - BILINGUAL_ALIAS
+  - FLOW_MATCH
+  - INTERFERENCE_SCORE
+  - UTILITY_SCORE
+  - MEMORY_SCORE
+  - TOKEN_COST
+
+source_ref: https://www.notion.so/366b38678ea581629d45fb6a245eacd9
+max_supported_hop_depth: 50

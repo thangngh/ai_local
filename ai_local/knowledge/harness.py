@@ -1,6 +1,6 @@
 from ai_local.knowledge.models import KnowledgeItem
+from ai_local.knowledge.policy import decide_knowledge
 
 
 def accept_item(item: KnowledgeItem) -> bool:
-    return item.rank >= 60 and item.confidence >= 0.60
-
+    return decide_knowledge(item).decision == "use"

@@ -10,3 +10,17 @@ class ToolDefinition(BaseModel):
     audit_required: bool
     approval_required: bool
     risk_level: str
+
+
+class ToolCall(BaseModel):
+    name: str
+    args: dict[str, object] = Field(default_factory=dict)
+    approved: bool = False
+
+
+class ToolResult(BaseModel):
+    tool_name: str
+    status: str
+    output: dict[str, object] = Field(default_factory=dict)
+    error: str | None = None
+    audited: bool = False

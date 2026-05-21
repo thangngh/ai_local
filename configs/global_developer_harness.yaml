@@ -1,0 +1,114 @@
+developer_phase:
+  source_ref: https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e
+  name: developer
+  phases:
+    - id: phase_1_core_loop
+      label: Core loop
+    - id: phase_2_retrieval
+      label: Retrieval
+    - id: phase_3_harness
+      label: Harness
+    - id: phase_4_evaluation
+      label: Evaluation
+    - id: phase_5_knowledge
+      label: Knowledge
+    - id: phase_6_skills
+      label: Skills
+
+  functional_requirements:
+    - id: F-CORE-001
+      name: FastAPI Gateway and request lifecycle
+      phase: phase_1_core_loop
+      gate_harnesses: [request_lifecycle, operational_safety]
+    - id: F-CORE-002
+      name: Agent loop state machine and planner flow
+      phase: phase_1_core_loop
+      gate_harnesses: [agent_loop, decision]
+    - id: F-CORE-003
+      name: Tool registry and allowed tool execution
+      phase: phase_1_core_loop
+      gate_harnesses: [tool_combo, prompt_injection]
+    - id: F-CORE-004
+      name: Queue worker, thread control, and outbox dispatcher
+      phase: phase_1_core_loop
+      gate_harnesses: [thread_control, operational_safety]
+    - id: F-RET-001
+      name: Hybrid retrieval and context packaging
+      phase: phase_2_retrieval
+      gate_harnesses: [retrieval, flow_memory_rating]
+    - id: F-RET-002
+      name: Indexer MVP inputs for FTS, vectors, and symbols
+      phase: phase_2_retrieval
+      gate_harnesses: [retrieval, memory_sql]
+    - id: F-HAR-001
+      name: Big harness and small patch harness
+      phase: phase_3_harness
+      gate_harnesses: [big_harness, small_patch, patch_levels]
+    - id: F-HAR-002
+      name: Patch pipeline with evidence and rollback decisions
+      phase: phase_3_harness
+      gate_harnesses: [patch_pipeline, composite, conflict_paths]
+    - id: F-EVAL-001
+      name: Evaluator score, decision gate, and confirmation flow
+      phase: phase_4_evaluation
+      gate_harnesses: [evaluation, decision, confirmation]
+    - id: F-KNOW-001
+      name: Knowledge harness, evidence rank, and conflict resolution
+      phase: phase_5_knowledge
+      gate_harnesses: [knowledge, evidence_rank, multi_conflict]
+    - id: F-KNOW-002
+      name: Memory layers, SQL schema, governance, and regression
+      phase: phase_5_knowledge
+      gate_harnesses: [memory_layers, memory_sql, memory_governance, memory_regression]
+    - id: F-SKILL-001
+      name: SKILL.md loader, registry, and skill workflow integration
+      phase: phase_6_skills
+      gate_harnesses: [skills, tool_combo]
+
+  non_functional_requirements:
+    - id: NF-SAFE-001
+      name: Retrieved content stays data-only and prompt injection is refused
+      gate_harnesses: [noise, prompt_injection, operational_safety]
+    - id: NF-SAFE-002
+      name: Risky changes require confirmation or stop
+      gate_harnesses: [confirmation, decision, conflict_paths]
+    - id: NF-QUAL-001
+      name: No fact without evidence and no confident code claim without tests
+      gate_harnesses: [evidence_rank, evaluation, patch_pipeline]
+    - id: NF-QUAL-002
+      name: Small patches promote through easy to extreme gates
+      gate_harnesses: [small_patch, patch_levels, composite]
+    - id: NF-LOCAL-001
+      name: Local-first SQLite workflows preserve auditability
+      gate_harnesses: [memory_sql, operational_safety, request_lifecycle]
+    - id: NF-ROBUST-001
+      name: Deep-hop, noisy, conflicting flows do not choose false certainty
+      gate_harnesses: [noise, multi_conflict, flow_memory_rating]
+
+known_gate_harnesses:
+  agent_loop: ai_local/harness/agent_loop_gate.py
+  big_harness: ai_local/harness/big_harness.py
+  composite: ai_local/harness/composite_gate.py
+  confirmation: ai_local/harness/confirmation_gate.py
+  conflict_paths: ai_local/harness/conflict_path_gate.py
+  decision: ai_local/harness/decision_gate.py
+  evaluation: ai_local/harness/evaluation_gate.py
+  evidence_rank: ai_local/harness/evidence_rank_gate.py
+  flow_memory_rating: ai_local/harness/flow_memory_rating_gate.py
+  knowledge: ai_local/harness/knowledge_gate.py
+  memory_governance: ai_local/harness/memory_governance_gate.py
+  memory_layers: ai_local/harness/memory_layer_gate.py
+  memory_regression: ai_local/harness/memory_regression_gate.py
+  memory_sql: ai_local/harness/memory_sql_gate.py
+  multi_conflict: ai_local/harness/multi_instance_conflict_gate.py
+  noise: ai_local/harness/noise_gate.py
+  operational_safety: ai_local/harness/operational_safety_gate.py
+  patch_levels: ai_local/harness/patch_levels.py
+  patch_pipeline: ai_local/harness/patch_pipeline_harness.py
+  prompt_injection: ai_local/harness/prompt_injection_refusal_gate.py
+  request_lifecycle: ai_local/harness/request_lifecycle_gate.py
+  retrieval: ai_local/harness/retrieval_gate.py
+  skills: ai_local/harness/skill_gate.py
+  small_patch: ai_local/harness/small_patch_harness.py
+  thread_control: ai_local/harness/thread_control_gate.py
+  tool_combo: ai_local/harness/tool_combo_gate.py

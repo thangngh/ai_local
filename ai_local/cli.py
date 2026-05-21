@@ -30,6 +30,11 @@ from ai_local.harness.prompt_injection_refusal_gate import (
     run_prompt_injection_refusal_promotion,
 )
 from ai_local.harness.thread_control_gate import run_thread_control_promotion
+from ai_local.harness.operational_safety_gate import run_operational_safety_promotion
+from ai_local.harness.memory_governance_gate import run_memory_governance_promotion
+from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
+from ai_local.harness.global_developer_harness import run_global_developer_harness
+from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
 
 app = typer.Typer()
 
@@ -548,6 +553,103 @@ def thread_control(
             typer.echo(result.reason)
             break
     if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def operational_safety(
+    max_level: str | None = typer.Option(None),
+    config: Path = typer.Option(Path("configs/operational_safety_gates.yaml")),
+) -> None:
+    results = run_operational_safety_promotion(config_path=config, max_level=max_level)
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        typer.echo(
+            f"{status} {result.level} max_hop_depth={result.max_hop_depth} "
+            f"cases={len(result.checked_case_ids)}"
+        )
+        if not result.passed:
+            failed = True
+            typer.echo(result.reason)
+            break
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def memory_governance(
+    max_level: str | None = typer.Option(None),
+    config: Path = typer.Option(Path("configs/memory_governance_gates.yaml")),
+) -> None:
+    results = run_memory_governance_promotion(config_path=config, max_level=max_level)
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        typer.echo(
+            f"{status} {result.level} max_hop_depth={result.max_hop_depth} "
+            f"cases={len(result.checked_case_ids)}"
+        )
+        if not result.passed:
+            failed = True
+            typer.echo(result.reason)
+            break
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def flow_memory_rating(
+    max_level: str | None = typer.Option(None),
+    config: Path = typer.Option(Path("configs/flow_memory_rating_gates.yaml")),
+) -> None:
+    results = run_flow_memory_rating_promotion(config_path=config, max_level=max_level)
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        typer.echo(
+            f"{status} {result.level} max_hop_depth={result.max_hop_depth} "
+            f"cases={len(result.checked_case_ids)}"
+        )
+        if not result.passed:
+            failed = True
+            typer.echo(result.reason)
+            break
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def global_developer(
+    config: Path = typer.Option(Path("configs/global_developer_harness.yaml")),
+    root: Path = typer.Option(Path(".")),
+) -> None:
+    result = run_global_developer_harness(config_path=config, root=root)
+    status = "PASS" if result.passed else "FAIL"
+    typer.echo(
+        f"{status} global_developer functional={result.functional_count} "
+        f"non_functional={result.non_functional_count} gates={result.gate_count}"
+    )
+    if result.errors:
+        for error in result.errors:
+            typer.echo(error)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def developer_sprints(
+    config: Path = typer.Option(Path("configs/developer_sprints.yaml")),
+    root: Path = typer.Option(Path(".")),
+) -> None:
+    result = run_developer_sprint_harness(config_path=config, root=root)
+    status = "PASS" if result.passed else "FAIL"
+    typer.echo(
+        f"{status} developer_sprints sprints={result.sprint_count} "
+        f"functionals={result.functional_count}"
+    )
+    if result.errors:
+        for error in result.errors:
+            typer.echo(error)
         raise typer.Exit(code=1)
 
 

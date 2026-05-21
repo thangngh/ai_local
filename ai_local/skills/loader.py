@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_local.config.loader import load_yaml
+
 
 @dataclass(frozen=True)
 class SkillDefinition:
@@ -13,6 +15,35 @@ class SkillDefinition:
     risk_level: str
     trusted: bool
     body: str
+
+
+class SkillRegistry:
+    def __init__(self, definitions: dict[str, SkillDefinition]) -> None:
+        self._definitions = definitions
+
+    @classmethod
+    def from_gate_config(cls, config_path: Path, *, root: Path) -> "SkillRegistry":
+        data = load_yaml(config_path)
+        registered = data.get("registered_skills", {})
+        if not isinstance(registered, dict):
+            return cls({})
+        definitions: dict[str, SkillDefinition] = {}
+        for skill_id, definition in registered.items():
+            if not isinstance(skill_id, str) or not isinstance(definition, dict):
+                continue
+            path = definition.get("path")
+            if isinstance(path, str):
+                definitions[skill_id] = parse_skill_markdown(root / path)
+        return cls(definitions)
+
+    def get(self, skill_id: str) -> SkillDefinition:
+        return self._definitions[skill_id]
+
+    def find(self, skill_id: str) -> SkillDefinition | None:
+        return self._definitions.get(skill_id)
+
+    def names(self) -> list[str]:
+        return sorted(self._definitions)
 
 
 def parse_skill_markdown(path: Path) -> SkillDefinition:

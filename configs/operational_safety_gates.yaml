@@ -1,0 +1,95 @@
+operational_safety_gate_levels:
+  easy:
+    description: Queue and thread controls from the operations subpage.
+    required_to_promote: true
+    max_hop_depth: 6
+    cases:
+      - id: worker_crash_reclaims_pending_job
+        flow: GATEWAY -> JOB_QUEUE -> WORKER -> HEARTBEAT -> AUDIT
+        scenario: worker_crash_reclaim
+        expected_decision: reclaim_job
+      - id: project_write_run_waits_for_lock
+        flow: GATEWAY -> THREAD_CONTROL -> LOCKS -> JOB_QUEUE
+        scenario: concurrent_write_run
+        expected_decision: wait_for_write_lock
+
+  medium:
+    description: Decision and outbox split for approved side effects.
+    required_to_promote: true
+    max_hop_depth: 15
+    cases:
+      - id: approved_patch_writes_outbox_event
+        flow: AGENT_LOOP -> EVALUATOR -> DECISION_GATE -> OUTBOX -> AUDIT
+        scenario: approved_side_effect
+        expected_decision: enqueue_outbox_event
+      - id: duplicate_dispatch_uses_idempotency
+        flow: OUTBOX -> DISPATCHER -> POLICY -> TOOL_RUNTIME -> AUDIT
+        scenario: duplicate_idempotency_key
+        expected_decision: dispatch_once
+
+  hard:
+    description: Queue, outbox, prompt firewall, and local security conflicts.
+    required_to_promote: true
+    max_hop_depth: 30
+    cases:
+      - id: retrieved_policy_override_is_quarantined
+        flow: RETRIEVER -> PROMPT_FIREWALL -> CONTEXT_BUILDER -> DECISION_GATE
+        scenario: prompt_policy_override
+        expected_decision: quarantine_context
+      - id: unapproved_git_push_is_blocked
+        flow: AGENT_LOOP -> DECISION_GATE -> OUTBOX -> APPROVAL -> DISPATCHER
+        scenario: approval_missing
+        expected_decision: hold_for_approval
+      - id: denied_secret_path_is_audited
+        flow: TOOL_RUNTIME -> SANDBOX -> SECRET_SCANNER -> AUDIT
+        scenario: denied_secret_path
+        expected_decision: deny_and_audit
+
+  extreme:
+    description: Crash and conflict recovery across operations modules up to hop 50.
+    required_to_promote: false
+    max_hop_depth: 50
+    cases:
+      - id: deep_crash_after_decision_replays_outbox
+        flow: GATEWAY -> JOB_QUEUE -> WORKER -> AGENT_LOOP -> EVALUATOR -> DECISION_GATE -> OUTBOX -> AUDIT -> DISPATCHER -> TOOL_RUNTIME
+        scenario: crash_after_decision
+        hop_depth: 50
+        expected_decision: replay_outbox_dispatch
+      - id: deep_failed_job_moves_dead_letter
+        flow: GATEWAY -> JOB_QUEUE -> WORKER -> HEARTBEAT -> RETRY_POLICY -> JOB_QUEUE -> AUDIT -> DEAD_LETTER
+        scenario: retry_budget_exhausted
+        hop_depth: 50
+        expected_decision: dead_letter_job
+
+promotion_order:
+  - easy
+  - medium
+  - hard
+  - extreme
+
+operational_modules:
+  - GATEWAY
+  - THREAD_CONTROL
+  - LOCKS
+  - JOB_QUEUE
+  - WORKER
+  - HEARTBEAT
+  - RETRY_POLICY
+  - DEAD_LETTER
+  - AGENT_LOOP
+  - EVALUATOR
+  - DECISION_GATE
+  - OUTBOX
+  - DISPATCHER
+  - APPROVAL
+  - POLICY
+  - TOOL_RUNTIME
+  - SANDBOX
+  - SECRET_SCANNER
+  - RETRIEVER
+  - PROMPT_FIREWALL
+  - CONTEXT_BUILDER
+  - AUDIT
+
+source_ref: https://www.notion.so/365b38678ea581f1876ae3459ec1f686
+max_supported_hop_depth: 50

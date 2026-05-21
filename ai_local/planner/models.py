@@ -6,3 +6,7 @@ class PlanItem(BaseModel):
     required_tools: list[str] = Field(default_factory=list)
     risk_level: str = "low"
 
+
+class PlanGateSignals(BaseModel):
+    ambiguity: bool = False
+    unsafe: bool = False

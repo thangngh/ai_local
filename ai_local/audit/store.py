@@ -18,3 +18,13 @@ def make_audit_event(action: str, target: str, result: str) -> AuditEvent:
         created_at=datetime.now(UTC).isoformat(),
     )
 
+
+class InMemoryAuditStore:
+    def __init__(self) -> None:
+        self._events: list[AuditEvent] = []
+
+    def append(self, event: AuditEvent) -> None:
+        self._events.append(event)
+
+    def list_events(self) -> list[AuditEvent]:
+        return list(self._events)

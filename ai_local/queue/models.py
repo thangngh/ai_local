@@ -18,4 +18,6 @@ class Job(BaseModel):
     status: JobStatus = JobStatus.PENDING
     priority: int = 100
     payload: dict[str, object]
-
+    attempts: int = 0
+    max_attempts: int = 3
+    last_error: str | None = None

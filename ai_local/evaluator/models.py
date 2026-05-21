@@ -1,4 +1,15 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+EvaluationDecision = Literal["accept", "retry", "verify", "ask_user", "quarantine", "stop"]
+SecuritySignal = Literal[
+    "deep_policy_shadowing",
+    "tool_policy_override",
+    "memory_conflict",
+    "laundered_evidence",
+]
 
 
 class EvaluationScore(BaseModel):
@@ -22,3 +33,11 @@ class EvaluationScore(BaseModel):
             - 0.10 * self.risk
         )
 
+
+class EvaluationResult(BaseModel):
+    score: EvaluationScore
+    final_score: float = Field(ge=-1.0, le=1.0)
+    decision: EvaluationDecision
+    retry_count: int = Field(ge=0)
+    reason: str
+    security_signal: SecuritySignal | None = None

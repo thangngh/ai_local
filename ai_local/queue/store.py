@@ -16,3 +16,16 @@ class InMemoryQueueStore:
         job.status = JobStatus.CLAIMED
         return job
 
+    def mark_running(self, job: Job) -> Job:
+        job.status = JobStatus.RUNNING
+        job.attempts += 1
+        return job
+
+    def mark_succeeded(self, job: Job) -> Job:
+        job.status = JobStatus.SUCCEEDED
+        return job
+
+    def mark_failed(self, job: Job, error: str) -> Job:
+        job.last_error = error
+        job.status = JobStatus.DEAD_LETTER if job.attempts >= job.max_attempts else JobStatus.PENDING
+        return job
