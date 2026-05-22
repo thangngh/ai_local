@@ -98,6 +98,8 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - [Phase 04 Sprint 04 Progress](docs/phase-04-sprint-04-progress.md)
 - [Phase 04 Sprint 05 Progress](docs/phase-04-sprint-05-progress.md)
 - [Phase 04 Close Report](docs/phase-04-close-report.md)
+- [Phase 05 Entry Plan](docs/phase-05-entry-plan.md)
+- [Phase 05 Close Checklist](docs/phase-05-close-checklist.md)
 
 ## Development Rule
 
