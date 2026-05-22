@@ -5,6 +5,7 @@ from ai_local.confirmation.models import (
     ConfirmationResolution,
     ConfirmationTrigger,
 )
+from ai_local.evaluator.models import EvaluationResult
 
 
 def request_confirmation(
@@ -106,3 +107,16 @@ def resolve_confirmation(
         next_state="RESUME_AGENT_RUN" if approved_by_current_user else "WAIT_FOR_HUMAN",
         reason="confirmation response processed",
     )
+
+
+def request_evaluation_confirmation(
+    result: EvaluationResult,
+    *,
+    question: ConfirmationQuestion,
+) -> ConfirmationResolution | ConfirmationRequest | None:
+    if result.decision != "ask_user":
+        return None
+    trigger: ConfirmationTrigger = (
+        "technical_risk" if result.score.risk >= 0.50 else "ambiguous_requirement"
+    )
+    return request_confirmation(trigger=trigger, question=question)

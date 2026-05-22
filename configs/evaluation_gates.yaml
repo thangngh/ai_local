@@ -46,6 +46,18 @@ evaluation_gate_levels:
         ambiguity: 0.75
         risk: 0.20
         expected_band: ask_user
+    observation_cases:
+      - id: failed_tool_retries_before_budget
+        tool_status: failed
+        output_present: true
+        retry_count: 0
+        expected_band: retry
+        hop_depth: 5
+      - id: empty_tool_output_verifies
+        tool_status: succeeded
+        output_present: false
+        expected_band: verify
+        hop_depth: 8
 
   hard:
     description: Risk, conflicting evidence, and unsafe patch evaluation.
@@ -79,6 +91,20 @@ evaluation_gate_levels:
         ambiguity: 0.20
         risk: 0.30
         expected_band: retry
+    observation_cases:
+      - id: repeated_action_replans
+        tool_status: succeeded
+        output_present: true
+        repeated_action_count: 3
+        expected_band: replan
+        hop_depth: 20
+      - id: completion_with_evidence_finishes
+        tool_status: succeeded
+        output_present: true
+        completion_ready: true
+        evidence_ready: true
+        expected_band: finish
+        hop_depth: 20
 
   extreme:
     description: Deep-hop noisy evaluation chains where score laundering must not bypass risk/evidence gates.
@@ -107,6 +133,22 @@ evaluation_gate_levels:
         hop_depth: 42
         noise_type: conflicting_evidence
         expected_band: ask_user
+    observation_cases:
+      - id: exhausted_failed_tool_replans_under_noise
+        tool_status: timed_out
+        output_present: false
+        retry_count: 2
+        hop_depth: 50
+        noise_type: noisy_timeout_chain
+        expected_band: replan
+      - id: completion_without_evidence_verifies
+        tool_status: succeeded
+        output_present: true
+        completion_ready: true
+        evidence_ready: false
+        hop_depth: 42
+        noise_type: false_finish_claim
+        expected_band: verify
 
 promotion_order:
   - easy

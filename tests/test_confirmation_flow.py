@@ -1,5 +1,6 @@
 from ai_local.confirmation.manager import (
     confirmation_decision,
+    request_evaluation_confirmation,
     request_confirmation,
     resolve_confirmation,
 )
@@ -9,6 +10,8 @@ from ai_local.confirmation.models import (
     ConfirmationRequest,
     ConfirmationResolution,
 )
+from ai_local.evaluator.models import EvaluationScore
+from ai_local.evaluator.service import evaluate
 
 
 def _question() -> ConfirmationQuestion:
@@ -21,6 +24,20 @@ def _question() -> ConfirmationQuestion:
         recommendation="Keep until audit evidence is complete.",
         evidence=["patch risk score is high", "outbox action is destructive"],
     )
+
+
+def _score(**overrides: float) -> EvaluationScore:
+    values = {
+        "correctness": 1.0,
+        "completeness": 1.0,
+        "evidence_quality": 1.0,
+        "requirement_match": 1.0,
+        "test_status": 1.0,
+        "ambiguity": 0.1,
+        "risk": 0.1,
+    }
+    values.update(overrides)
+    return EvaluationScore(**values)
 
 
 def test_confirmation_request_routes_technical_risk_and_destructive_action() -> None:
@@ -76,3 +93,24 @@ def test_conflicting_confirmation_asks_again_and_dangerous_action_waits_for_appr
         trigger="dangerous_action",
         approved_by_current_user=True,
     ).next_state == "RESUME_AGENT_RUN"
+
+
+def test_evaluation_confirmation_routes_ambiguity_and_risk() -> None:
+    ambiguous = request_evaluation_confirmation(
+        evaluate(_score(ambiguity=0.75), retry_count=0),
+        question=_question(),
+    )
+    risky = request_evaluation_confirmation(
+        evaluate(_score(correctness=0.5, completeness=0.5, risk=0.55), retry_count=2),
+        question=_question(),
+    )
+    accepted = request_evaluation_confirmation(
+        evaluate(_score(), retry_count=0),
+        question=_question(),
+    )
+
+    assert isinstance(ambiguous, ConfirmationRequest)
+    assert ambiguous.trigger == "ambiguous_requirement"
+    assert isinstance(risky, ConfirmationRequest)
+    assert confirmation_decision(risky).decision == "ask_tech_lead"
+    assert accepted is None

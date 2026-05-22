@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
+from ai_local.evaluator.models import EvaluationResult
+
 
 PatchEvidenceKind = Literal["context", "diff", "test", "manual"]
 
@@ -85,6 +87,8 @@ class PatchAttempt:
     completed_stages: list[str] = field(default_factory=list)
     evaluator_passed: bool = True
     evaluator_evidence_ref: PatchEvidenceRef | None = None
+    evaluation_result: EvaluationResult | None = None
+    retry_count: int = 0
     more_patch_required: bool = False
 
 

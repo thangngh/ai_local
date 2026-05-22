@@ -72,7 +72,55 @@ developer_sprints:
           before_gate_summary: Patch pipeline work states the objective, evidence chain, rollback condition, and conflict class before edits.
           after_gate_summary: Pipeline, composite, and conflict gates confirm task-to-patch-to-evidence decisions still choose valid paths only.
 
-    - id: sprint_05_evaluation_decision
+    - id: sprint_05_phase_3_harness_close
+      phase: phase_3_harness
+      objective: Close Phase 3 evidence binding, stage trace, and retry budget controls.
+      functionals:
+        - id: F-HAR-003
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli small-patch
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli patch-levels
+          before_gate_summary: Closure patch proves patch evidence refs and evidence kinds stay explicit.
+          after_gate_summary: Small-patch, level, and pipeline gates show typed evidence refs remain enforced before accepted patch decisions.
+        - id: F-HAR-004
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli small-patch
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli patch-levels
+          before_gate_summary: Closure patch proves required focused check IDs still carry test evidence.
+          after_gate_summary: Small-patch, level, and pipeline gates show focused check evidence remains bound to accepted attempts.
+        - id: F-HAR-005
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli composite
+            - .\.venv\Scripts\python -m ai_local.cli conflict-paths --max-level hard
+          before_gate_summary: Closure patch states required pre-apply diff, scope, risk, and semantic stage ordering.
+          after_gate_summary: Pipeline, composite, and conflict gates keep pre-apply patch stages ordered before write application.
+        - id: F-HAR-006
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli composite
+            - .\.venv\Scripts\python -m ai_local.cli conflict-paths --max-level hard
+          before_gate_summary: Closure patch states evaluator result and evidence requirements before decision entry.
+          after_gate_summary: Pipeline and combined gates keep evaluator proof ahead of accepted decision routing.
+        - id: F-HAR-007
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli small-patch
+            - .\.venv\Scripts\python -m ai_local.cli composite
+          before_gate_summary: Closure patch states focused test, test gate, and evaluator stage ordering after apply.
+          after_gate_summary: Patch flow gates keep post-apply test and evaluator stages ordered before decision.
+        - id: F-HAR-008
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli big-harness
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli composite
+            - .\.venv\Scripts\python -m ai_local.cli conflict-paths --max-level hard
+          before_gate_summary: Closure patch states whole-run safety, confirmation, retry limit, and exhausted retry outcome.
+          after_gate_summary: Big-harness and patch flow gates prove safety policy and retry-budget controls route unsafe repeats to ask or rollback.
+
+    - id: phase_04_sprint_01_evaluation_decision
       phase: phase_4_evaluation
       objective: Implement evaluator output, decision policy, and confirmation manager flow.
       functionals:
@@ -84,7 +132,59 @@ developer_sprints:
           before_gate_summary: Evaluation patch records score fields, risk threshold, retry budget, and confirmation trigger before policy changes.
           after_gate_summary: Evaluation, decision, and confirmation gates show score output routes to accept, retry, ask, or stop as designed.
 
-    - id: sprint_06_knowledge_evidence
+    - id: phase_04_sprint_02_evaluation_evidence
+      phase: phase_4_evaluation
+      objective: Bind evaluator evidence, verification context, and audited safety routing.
+      functionals:
+        - id: F-EVAL-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli evaluation
+            - .\.venv\Scripts\python -m ai_local.cli retrieval --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+          before_gate_summary: Evaluation evidence patch states context refs, test refs, verify retrieval, and quarantine or stop audit routing before changes.
+          after_gate_summary: Evaluation, retrieval, pipeline, and operational gates show evidence payloads gate accept paths and safety exits stay auditable.
+
+    - id: phase_04_sprint_03_evaluation_runtime
+      phase: phase_4_evaluation
+      objective: Verify evaluation through the agent loop and preserve conflict-safe routing.
+      functionals:
+        - id: F-EVAL-003
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli agent-loop --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli evaluation
+            - .\.venv\Scripts\python -m ai_local.cli flow-memory-rating --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli multi-conflict --max-level hard
+          before_gate_summary: Runtime evaluation patch states verify retrieval, audit result, memory conflict signal, and confirmation boundary before integration.
+          after_gate_summary: Agent-loop, evaluation, memory-flow, and conflict gates show verification can fetch context without converting unresolved memory conflict into false accept.
+
+    - id: phase_04_sprint_04_evaluation_confirmation_resume
+      phase: phase_4_evaluation
+      objective: Resume evaluator routing after confirmation without bypassing evidence checks.
+      functionals:
+        - id: F-EVAL-004
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli agent-loop --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli evaluation
+            - .\.venv\Scripts\python -m ai_local.cli confirmation --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli request-lifecycle
+          before_gate_summary: Confirmation resume patch states user or lead response, evaluator evidence, run-state resume, and conflicting confirmation reroute before integration.
+          after_gate_summary: Agent-loop, evaluation, confirmation, and lifecycle gates show confirmation can resume evaluator routing while missing evidence and conflicts still verify or ask again.
+
+    - id: phase_04_sprint_05_observation_close
+      phase: phase_4_evaluation
+      objective: Close Phase 4 with observation-aware retry, re-plan, and finish routing.
+      functionals:
+        - id: F-EVAL-005
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli agent-loop --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli evaluation
+            - .\.venv\Scripts\python -m ai_local.cli decision --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+          before_gate_summary: Observation closure patch states tool status, empty output, repeated action count, finish evidence, and unsafe observation branch before evaluator routing changes.
+          after_gate_summary: Agent-loop, evaluation, decision, and operational gates show failed or empty tool observations retry or verify, repeated actions re-plan, and evidence-backed completion reaches done.
+
+    - id: sprint_07_knowledge_evidence
       phase: phase_5_knowledge
       objective: Implement knowledge cards, evidence rank, and conflict resolver.
       functionals:
@@ -96,7 +196,7 @@ developer_sprints:
           before_gate_summary: Knowledge patch names the claim level, evidence authority, rank impact, and conflict expectation before implementation.
           after_gate_summary: Knowledge, rank, and conflict gates confirm claims remain evidenced and unresolved ties do not become false facts.
 
-    - id: sprint_07_memory_governance
+    - id: sprint_08_memory_governance
       phase: phase_5_knowledge
       objective: Implement memory layers, schema, regression, and governance scoring.
       functionals:
@@ -109,7 +209,7 @@ developer_sprints:
           before_gate_summary: Memory patch declares scope, evidence, freshness, conflict, and hop-depth risk before schema or retrieval behavior changes.
           after_gate_summary: Memory gates confirm layer, schema, governance, and regression behavior still preserve safe write and retrieval decisions.
 
-    - id: sprint_08_skills_integration
+    - id: sprint_09_skills_integration
       phase: phase_6_skills
       objective: Implement skill metadata loading and permission-aware workflow integration.
       functionals:

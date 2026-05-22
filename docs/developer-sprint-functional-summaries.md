@@ -10,7 +10,17 @@
 | `F-RET-002` | State index metadata and schema fields required by retrieval. | Report whether retrieval and SQL-linked gates preserve stored context inputs. |
 | `F-HAR-001` | State patch size, evidence, checks, and target promotion level. | Report whether big, small, and patch-level gates enforce the same patch boundaries. |
 | `F-HAR-002` | State objective, evidence chain, rollback condition, and conflict class. | Report whether patch pipeline and conflict gates still pick only valid paths. |
+| `F-HAR-003` | State patch evidence refs and evidence kinds. | Report whether accepted patch attempts keep evidence source binding explicit. |
+| `F-HAR-004` | State required focused check IDs and test evidence. | Report whether required check results remain bound to accepted attempts. |
+| `F-HAR-005` | State required pre-apply diff, scope, risk, and semantic stages. | Report whether patch writes remain behind ordered pre-apply gates. |
+| `F-HAR-006` | State evaluator status and evaluator evidence before decision. | Report whether decision entry stays behind evaluator proof. |
+| `F-HAR-007` | State focused test, test gate, and evaluator stages after apply. | Report whether post-apply stages stay ordered before accepted decisions. |
+| `F-HAR-008` | State Big Harness safety, confirmation, retry limit, and exhausted retry outcome. | Report whether repeated unsafe patch retries ask or rollback. |
 | `F-EVAL-001` | State score fields, risk threshold, retry budget, and confirmation trigger. | Report whether evaluator, decision, and confirmation gates route correctly. |
+| `F-EVAL-002` | State evaluator context/test evidence, verification context, and audited quarantine or stop path. | Report whether evidence-gated accept and safety exit routing remain explicit. |
+| `F-EVAL-003` | State agent-loop verification query, audit route, and memory or confirmation conflict boundary. | Report whether runtime verification adds context without promoting unresolved conflicts. |
+| `F-EVAL-004` | State confirmation response, evaluator evidence, run-state resume, and conflicting confirmation reroute. | Report whether confirmation resumes evaluation without bypassing missing-evidence or ask-again routes. |
+| `F-EVAL-005` | State tool observation status, empty output, repeated action count, finish evidence, and unsafe observation branch. | Report whether observation routing retries, verifies, re-plans, or finishes without false completion. |
 | `F-KNOW-001` | State knowledge level, evidence authority, rank impact, and expected conflict behavior. | Report whether knowledge, rank, and conflict gates avoid unsupported facts. |
 | `F-KNOW-002` | State memory scope, evidence, freshness, conflict, and deep-hop risk. | Report whether memory gates preserve write, retrieval, governance, and regression behavior. |
 | `F-SKILL-001` | State skill trust, allowed tools, module bridge, and workflow evidence. | Report whether skill and tool gates preserve permission-aware integration. |

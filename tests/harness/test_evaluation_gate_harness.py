@@ -3,8 +3,10 @@ from pathlib import Path
 from ai_local.config.loader import load_yaml
 from ai_local.harness.evaluation_gate import (
     EvaluationCase,
+    ObservationEvaluationCase,
     evaluation_score,
     infer_evaluation_band,
+    infer_observation_band,
     load_evaluation_levels,
     run_evaluation_promotion,
 )
@@ -53,3 +55,20 @@ def test_evaluation_score_accepts_clean_case() -> None:
     assert evaluation_score(case) == 0.9
     assert infer_evaluation_band(case) == "accept"
 
+
+def test_evaluation_observation_case_replans_repeated_action() -> None:
+    case = ObservationEvaluationCase(
+        id="repeated",
+        tool_status="succeeded",
+        output_present=True,
+        repeated_action_count=3,
+        completion_ready=False,
+        evidence_ready=False,
+        retry_count=1,
+        unsafe_request=False,
+        expected_band="replan",
+        hop_depth=20,
+        noise_type="repeat_loop",
+    )
+
+    assert infer_observation_band(case) == "replan"

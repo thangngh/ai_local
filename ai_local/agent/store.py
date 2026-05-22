@@ -36,3 +36,17 @@ class InMemoryAgentRunStore:
         run.decision = "stop"
         run.next_state = "STOP"
         return run
+
+    def mark_running(self, run_id: str, *, decision: str, next_state: str) -> AgentRun:
+        run = self._runs[run_id]
+        run.status = AgentRunStatus.RUNNING
+        run.decision = decision
+        run.next_state = next_state
+        return run
+
+    def mark_succeeded(self, run_id: str) -> AgentRun:
+        run = self._runs[run_id]
+        run.status = AgentRunStatus.SUCCEEDED
+        run.decision = "finish"
+        run.next_state = "DONE"
+        return run

@@ -22,10 +22,26 @@ class EvaluationCase:
 
 
 @dataclass(frozen=True)
+class ObservationEvaluationCase:
+    id: str
+    tool_status: str
+    output_present: bool
+    repeated_action_count: int
+    completion_ready: bool
+    evidence_ready: bool
+    retry_count: int
+    unsafe_request: bool
+    expected_band: str
+    hop_depth: int
+    noise_type: str | None
+
+
+@dataclass(frozen=True)
 class EvaluationLevel:
     name: str
     max_hop_depth: int
     cases: list[EvaluationCase]
+    observation_cases: list[ObservationEvaluationCase]
     required_to_promote: bool
     description: str
 
@@ -68,6 +84,20 @@ def infer_evaluation_band(case: EvaluationCase) -> str:
     return "ask_user"
 
 
+def infer_observation_band(case: ObservationEvaluationCase) -> str:
+    if case.unsafe_request:
+        return "stop"
+    if case.completion_ready:
+        return "finish" if case.evidence_ready else "verify"
+    if case.repeated_action_count >= 3:
+        return "replan"
+    if case.tool_status in {"failed", "denied", "timed_out"}:
+        return "retry" if case.retry_count < 2 else "replan"
+    if not case.output_present:
+        return "verify"
+    return "retry"
+
+
 def load_evaluation_levels(config_path: Path) -> list[EvaluationLevel]:
     data = load_yaml(config_path)
     levels = data.get("evaluation_gate_levels", {})
@@ -101,11 +131,29 @@ def load_evaluation_levels(config_path: Path) -> list[EvaluationLevel]:
             for case in definition.get("cases", [])
             if isinstance(case, dict)
         ]
+        observation_cases = [
+            ObservationEvaluationCase(
+                id=str(case["id"]),
+                tool_status=str(case["tool_status"]),
+                output_present=bool(case["output_present"]),
+                repeated_action_count=int(case.get("repeated_action_count", 0)),
+                completion_ready=bool(case.get("completion_ready", False)),
+                evidence_ready=bool(case.get("evidence_ready", False)),
+                retry_count=int(case.get("retry_count", 0)),
+                unsafe_request=bool(case.get("unsafe_request", False)),
+                expected_band=str(case["expected_band"]),
+                hop_depth=int(case.get("hop_depth", max_hop_depth)),
+                noise_type=str(case["noise_type"]) if "noise_type" in case else None,
+            )
+            for case in definition.get("observation_cases", [])
+            if isinstance(case, dict)
+        ]
         loaded.append(
             EvaluationLevel(
                 name=level_name,
                 max_hop_depth=max_hop_depth,
                 cases=cases,
+                observation_cases=observation_cases,
                 required_to_promote=bool(definition.get("required_to_promote", True)),
                 description=str(definition.get("description", "")),
             )
@@ -115,24 +163,46 @@ def load_evaluation_levels(config_path: Path) -> list[EvaluationLevel]:
 
 def validate_evaluation_level(level: EvaluationLevel) -> EvaluationGateResult:
     checked_case_ids: list[str] = []
-    for case in level.cases:
-        checked_case_ids.append(case.id)
-        if case.hop_depth > level.max_hop_depth:
+    for score_case in level.cases:
+        checked_case_ids.append(score_case.id)
+        if score_case.hop_depth > level.max_hop_depth:
             return EvaluationGateResult(
                 level.name,
                 False,
                 checked_case_ids,
                 level.max_hop_depth,
-                f"{case.id} exceeds max hop depth",
+                f"{score_case.id} exceeds max hop depth",
             )
-        actual = infer_evaluation_band(case)
-        if actual != case.expected_band:
+        actual = infer_evaluation_band(score_case)
+        if actual != score_case.expected_band:
             return EvaluationGateResult(
                 level.name,
                 False,
                 checked_case_ids,
                 level.max_hop_depth,
-                f"{case.id} expected {case.expected_band}, got {actual}",
+                f"{score_case.id} expected {score_case.expected_band}, got {actual}",
+            )
+    for observation_case in level.observation_cases:
+        checked_case_ids.append(observation_case.id)
+        if observation_case.hop_depth > level.max_hop_depth:
+            return EvaluationGateResult(
+                level.name,
+                False,
+                checked_case_ids,
+                level.max_hop_depth,
+                f"{observation_case.id} exceeds max hop depth",
+            )
+        actual = infer_observation_band(observation_case)
+        if actual != observation_case.expected_band:
+            return EvaluationGateResult(
+                level.name,
+                False,
+                checked_case_ids,
+                level.max_hop_depth,
+                (
+                    f"{observation_case.id} expected "
+                    f"{observation_case.expected_band}, got {actual}"
+                ),
             )
     return EvaluationGateResult(level.name, True, checked_case_ids, level.max_hop_depth)
 
@@ -151,4 +221,3 @@ def run_evaluation_promotion(
         if level.required_to_promote and not result.passed:
             break
     return results
-

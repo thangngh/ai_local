@@ -48,10 +48,50 @@ developer_phase:
       name: Patch pipeline with evidence and rollback decisions
       phase: phase_3_harness
       gate_harnesses: [patch_pipeline, composite, conflict_paths]
+    - id: F-HAR-003
+      name: Patch evidence refs by evidence kind
+      phase: phase_3_harness
+      gate_harnesses: [small_patch, patch_pipeline, patch_levels]
+    - id: F-HAR-004
+      name: Required focused check result evidence binding
+      phase: phase_3_harness
+      gate_harnesses: [small_patch, patch_pipeline, patch_levels]
+    - id: F-HAR-005
+      name: Pre-apply patch stage trace
+      phase: phase_3_harness
+      gate_harnesses: [patch_pipeline, composite, conflict_paths]
+    - id: F-HAR-006
+      name: Evaluator result evidence before decision
+      phase: phase_3_harness
+      gate_harnesses: [patch_pipeline, composite, conflict_paths]
+    - id: F-HAR-007
+      name: Post-apply patch stage trace
+      phase: phase_3_harness
+      gate_harnesses: [patch_pipeline, small_patch, composite]
+    - id: F-HAR-008
+      name: Big Harness safety, confirmation, and retry budget contract
+      phase: phase_3_harness
+      gate_harnesses: [big_harness, patch_pipeline, composite, conflict_paths]
     - id: F-EVAL-001
       name: Evaluator score, decision gate, and confirmation flow
       phase: phase_4_evaluation
       gate_harnesses: [evaluation, decision, confirmation]
+    - id: F-EVAL-002
+      name: Evaluation evidence, verification, and audited safety routing
+      phase: phase_4_evaluation
+      gate_harnesses: [evaluation, retrieval, patch_pipeline, operational_safety]
+    - id: F-EVAL-003
+      name: Evaluation runtime verification and conflict-safe routing
+      phase: phase_4_evaluation
+      gate_harnesses: [agent_loop, evaluation, flow_memory_rating, multi_conflict]
+    - id: F-EVAL-004
+      name: Evaluation confirmation resume and evidence-safe rerouting
+      phase: phase_4_evaluation
+      gate_harnesses: [agent_loop, evaluation, confirmation, request_lifecycle]
+    - id: F-EVAL-005
+      name: Observation evaluation retry, re-plan, and finish routing
+      phase: phase_4_evaluation
+      gate_harnesses: [agent_loop, evaluation, decision, operational_safety]
     - id: F-KNOW-001
       name: Knowledge harness, evidence rank, and conflict resolution
       phase: phase_5_knowledge
