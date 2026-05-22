@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -76,9 +77,11 @@ def load_gate_levels(config_path: Path) -> list[GateLevel]:
 
 def run_command(command_id: str, argv: list[str], cwd: Path, timeout_seconds: int) -> GateResult:
     normalized_argv = normalize_python_tool_argv(argv)
+    env = _command_env(argv, cwd)
     completed = subprocess.run(
         normalized_argv,
         cwd=cwd,
+        env=env,
         timeout=timeout_seconds,
         capture_output=True,
         text=True,
@@ -98,6 +101,17 @@ def normalize_python_tool_argv(argv: list[str]) -> list[str]:
     if argv[0] in {"pytest", "ruff", "mypy"}:
         return [sys.executable, "-m", *argv]
     return argv
+
+
+def _command_env(argv: list[str], cwd: Path) -> dict[str, str] | None:
+    if not argv or argv[0] != "pytest":
+        return None
+    temp_root = cwd / ".pytest-tool-temp"
+    temp_root.mkdir(exist_ok=True)
+    env = dict(os.environ)
+    env["TMP"] = str(temp_root)
+    env["TEMP"] = str(temp_root)
+    return env
 
 
 def run_patch_gate(

@@ -79,6 +79,13 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - [Sprint 08 Progress](docs/sprint-08-progress.md)
 - [Phase 02 Sprint 01 Progress](docs/phase-02-sprint-01-progress.md)
 - [Phase 02 Sprint 02 Progress](docs/phase-02-sprint-02-progress.md)
+- [Phase 02 Sprint 03 Progress](docs/phase-02-sprint-03-progress.md)
+- [Phase 02 Sprint 04 Progress](docs/phase-02-sprint-04-progress.md)
+- [Phase 02 Sprint 05 Progress](docs/phase-02-sprint-05-progress.md)
+- [Phase 02 Sprint 06 Progress](docs/phase-02-sprint-06-progress.md)
+- [Phase 02 Sprint 07 Progress](docs/phase-02-sprint-07-progress.md)
+- [Phase 02 Sprint 08 Progress](docs/phase-02-sprint-08-progress.md)
+- [Phase 02 Sprint 09 Progress](docs/phase-02-sprint-09-progress.md)
 
 ## Development Rule
 

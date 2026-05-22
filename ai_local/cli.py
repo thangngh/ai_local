@@ -35,6 +35,12 @@ from ai_local.harness.memory_governance_gate import run_memory_governance_promot
 from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
 from ai_local.harness.global_developer_harness import run_global_developer_harness
 from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
+from ai_local.indexer.project import (
+    rebuild_project_index,
+    refresh_and_retrieve_project,
+    refresh_project_index,
+)
+from ai_local.indexer.sqlite_store import KnowledgeIndexStore
 
 app = typer.Typer()
 
@@ -214,6 +220,68 @@ def retrieval(
             break
     if failed:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def project_retrieval(
+    query: str = typer.Argument(...),
+    root: Path = typer.Option(Path(".")),
+    knowledge_db: Path = typer.Option(Path("knowledge.db")),
+    chunk_lines: int = typer.Option(40, min=1),
+    max_hits: int = typer.Option(5, min=1),
+) -> None:
+    result = refresh_and_retrieve_project(
+        query,
+        root,
+        KnowledgeIndexStore(knowledge_db),
+        chunk_lines=chunk_lines,
+        max_hits=max_hits,
+    )
+    typer.echo(
+        f"INDEX indexed={len(result.batch.documents)} "
+        f"unchanged={len(result.batch.unchanged_paths)} "
+        f"skipped={len(result.batch.skipped_paths)}"
+    )
+    typer.echo(
+        f"RETRIEVE decision={result.package.decision} "
+        f"hits={len(result.package.selected_hits)}"
+    )
+    for ref in result.package.evidence_refs:
+        typer.echo(f"EVIDENCE {ref}")
+
+
+@app.command()
+def project_index(
+    root: Path = typer.Option(Path(".")),
+    knowledge_db: Path = typer.Option(Path("knowledge.db")),
+    chunk_lines: int = typer.Option(40, min=1),
+) -> None:
+    batch = refresh_project_index(root, KnowledgeIndexStore(knowledge_db), chunk_lines=chunk_lines)
+    typer.echo(
+        f"INDEX indexed={len(batch.documents)} unchanged={len(batch.unchanged_paths)} "
+        f"deleted={len(batch.deleted_paths)} skipped={len(batch.skipped_paths)}"
+    )
+
+
+@app.command()
+def project_index_stats(knowledge_db: Path = typer.Option(Path("knowledge.db"))) -> None:
+    store = KnowledgeIndexStore(knowledge_db)
+    store.initialize()
+    stats = store.stats()
+    typer.echo(f"INDEX_STATS files={stats.files} chunks={stats.chunks} symbols={stats.symbols}")
+
+
+@app.command()
+def project_index_rebuild(
+    root: Path = typer.Option(Path(".")),
+    knowledge_db: Path = typer.Option(Path("knowledge.db")),
+    chunk_lines: int = typer.Option(40, min=1),
+) -> None:
+    batch = rebuild_project_index(root, KnowledgeIndexStore(knowledge_db), chunk_lines=chunk_lines)
+    typer.echo(
+        f"REBUILD indexed={len(batch.documents)} deleted={len(batch.deleted_paths)} "
+        f"skipped={len(batch.skipped_paths)}"
+    )
 
 
 @app.command()

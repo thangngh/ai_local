@@ -21,6 +21,9 @@ dev = [
   "mypy>=1.11",
   "types-PyYAML>=6.0",
 ]
+vector = [
+  "sqlite-vec>=0.1.9",
+]
 
 [tool.ruff]
 line-length = 100

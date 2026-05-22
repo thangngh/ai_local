@@ -24,6 +24,7 @@ class RetrievalHit:
     flow_match: float = 0.0
     source_authority: float = 0.0
     freshness: float = 1.0
+    semantic_score: float = 0.0
     interference: float = 0.0
     flags: list[str] = field(default_factory=list)
 
@@ -35,6 +36,7 @@ class RetrievalHit:
             + 0.15 * self.evidence_strength
             + 0.10 * self.source_authority
             + 0.10 * self.freshness
+            + 0.05 * self.semantic_score
             - 0.25 * self.interference
         )
 

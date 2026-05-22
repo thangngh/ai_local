@@ -1,9 +1,14 @@
+from pathlib import Path
+
 from ai_local.agent.loop import AgentLoop
 from ai_local.agent.state import AgentRun, AgentRunStatus
 from ai_local.agent.store import InMemoryAgentRunStore
+from ai_local.indexer.project import ProjectRetriever
+from ai_local.indexer.sqlite_store import KnowledgeIndexStore
 from ai_local.planner.gate import decide_plan
 from ai_local.planner.models import PlanGateSignals, PlanItem
 from ai_local.planner.service import plan_from_goal
+from ai_local.retrieval.models import ContextPackage, RetrievalQuery
 
 
 def test_planner_builds_requirement_analysis_plan() -> None:
@@ -56,3 +61,39 @@ def test_agent_loop_stops_unsafe_plan_and_records_state() -> None:
     assert run is not None
     assert run.status == AgentRunStatus.STOPPED
     assert run.decision == "stop"
+
+
+def test_agent_loop_retrieves_context_after_retrieve_plan_gate() -> None:
+    class StaticRetriever:
+        def retrieve(self, query: str) -> ContextPackage:
+            return ContextPackage(
+                query=RetrievalQuery(raw=query, normalized=query.lower(), aliases=[query.lower()]),
+                hits=[],
+                selected_hits=[],
+                rejected_hits=[],
+                decision="verify",
+                reason="configured retrieval dependency",
+            )
+
+    result = AgentLoop(context_retriever=StaticRetriever()).run_once(
+        "task_4",
+        "Use retrieval context",
+    )
+
+    assert result.decision.next_state == "RETRIEVE"
+    assert result.context is not None
+    assert result.context.query.raw == "Use retrieval context"
+
+
+def test_agent_loop_uses_project_retriever_runtime_path(tmp_path: Path) -> None:
+    (tmp_path / "notes.md").write_text("retrieval project evidence\n", encoding="utf-8")
+    retriever = ProjectRetriever(tmp_path, KnowledgeIndexStore(tmp_path / "knowledge.db"))
+
+    result = AgentLoop(context_retriever=retriever).run_once(
+        "task_5",
+        "retrieval project evidence",
+    )
+
+    assert result.context is not None
+    assert result.context.decision == "continue"
+    assert result.context.evidence_refs == ["notes.md:1-1"]

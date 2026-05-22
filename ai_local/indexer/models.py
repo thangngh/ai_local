@@ -10,6 +10,7 @@ class IndexedFile:
     content_hash: str
     size: int
     source_ref: str
+    modified_ns: int = 0
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class IndexedChunk:
     evidence_strength: float = 0.5
     source_authority: float = 0.5
     freshness: float = 1.0
+    semantic_score: float = 0.0
     flags: list[str] = field(default_factory=list)
 
 
@@ -37,3 +39,19 @@ class IndexedDocument:
 
     def retrieval_chunks(self) -> list[IndexedChunk]:
         return self.chunks
+
+
+@dataclass(frozen=True)
+class IndexManifestEntry:
+    path: str
+    content_hash: str
+    modified_ns: int
+
+
+@dataclass(frozen=True)
+class IndexBatchResult:
+    documents: list[IndexedDocument]
+    manifest: dict[str, IndexManifestEntry]
+    skipped_paths: list[str]
+    unchanged_paths: list[str]
+    deleted_paths: list[str] = field(default_factory=list)
