@@ -26,6 +26,13 @@ def validate_patch_harness(
         reasons.append("allowed_files missing")
     if required_evidence - spec.evidence:
         reasons.append("required evidence missing")
+    if required_evidence and not spec.evidence_refs:
+        reasons.append("evidence refs missing")
+    if "git_diff" in required_evidence and not _has_evidence_kind(spec, "diff"):
+        reasons.append("diff evidence ref missing")
+    if any(item.startswith("focused_harness") for item in required_evidence):
+        if not _has_evidence_kind(spec, "test"):
+            reasons.append("focused harness evidence ref missing")
     if required_checks - spec.checks:
         reasons.append("required checks missing")
     if any(path in spec.forbidden_files for path in summary.files_changed):
@@ -34,6 +41,10 @@ def validate_patch_harness(
         reasons.append("changed file outside scope")
     if summary.new_dependencies > level.max_new_dependencies:
         reasons.append("new dependency exceeds level")
+    if summary.change_types & set(level.forbidden_change_types):
+        reasons.append("forbidden change type")
+    if summary.change_types and not summary.change_types <= set(level.allowed_change_types):
+        reasons.append("change type outside level")
     if summary.changed_lines > level.max_changed_lines:
         return PatchPolicyResult(False, "split", [*reasons, "changed lines exceed level"])
     if len(summary.files_changed) > level.max_files_changed:
@@ -47,3 +58,7 @@ def validate_patch_harness(
     if reasons:
         return PatchPolicyResult(False, "reject", reasons)
     return PatchPolicyResult(True, "continue", [])
+
+
+def _has_evidence_kind(spec: PatchHarnessSpec, kind: str) -> bool:
+    return any(evidence.kind == kind for evidence in spec.evidence_refs)

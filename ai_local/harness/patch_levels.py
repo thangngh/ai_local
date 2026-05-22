@@ -19,6 +19,8 @@ class PatchLevel:
     requires_focused_harness: bool
     requires_full_tests: bool
     requires_rollback_plan: bool
+    allowed_change_types: list[str]
+    forbidden_change_types: list[str]
 
 
 def load_patch_levels(config_path: Path) -> list[PatchLevel]:
@@ -49,6 +51,10 @@ def load_patch_levels(config_path: Path) -> list[PatchLevel]:
                 requires_focused_harness=bool(definition["requires_focused_harness"]),
                 requires_full_tests=bool(definition["requires_full_tests"]),
                 requires_rollback_plan=bool(definition["requires_rollback_plan"]),
+                allowed_change_types=[str(item) for item in definition.get("allowed_change_types", [])],
+                forbidden_change_types=[
+                    str(item) for item in definition.get("forbidden_change_types", [])
+                ],
             )
         )
     return loaded
@@ -72,4 +78,3 @@ def validate_patch_levels(levels: list[PatchLevel]) -> list[str]:
         previous_hop = level.max_hop_depth
         previous_lines = level.max_changed_lines
     return errors
-
