@@ -13,6 +13,8 @@ MemoryLevel = Literal[
 ]
 MemoryScope = Literal["session", "global", "project", "repo"]
 MemoryStatus = Literal["candidate", "active", "stale", "archived", "quarantined"]
+MemorySensitivity = Literal["public", "internal", "sensitive", "secret"]
+MemoryEvidenceType = Literal["user_confirmation", "project_doc", "test", "usage", "source_hash"]
 MemoryWriteDecision = Literal[
     "accept",
     "accept_memory",
@@ -64,6 +66,41 @@ class MemoryItem(BaseModel):
     inferred_policy: bool = False
     source_hash_changed: bool = False
     harmful_usage: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    conflict_refs: list[str] = Field(default_factory=list)
+    role: str = "assistant"
+    sensitivity: MemorySensitivity = "public"
+    confirmed_by: str | None = None
+    source_hash: str | None = None
+    last_used_at: str | None = None
+
+    @property
+    def has_explicit_evidence(self) -> bool:
+        return bool(self.evidence_refs or self.confirmed_by)
+
+
+class MemoryEvidenceRecord(BaseModel):
+    memory_id: str = Field(min_length=1)
+    evidence_type: MemoryEvidenceType
+    ref: str = Field(min_length=1)
+    summary: str = ""
+    weight: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class MemoryConflictRecord(BaseModel):
+    memory_id: str = Field(min_length=1)
+    conflicting_memory_id: str = Field(min_length=1)
+    conflict_score: float = Field(ge=0.0, le=1.0)
+    reason: str
+    status: Literal["open", "resolved", "ignored"] = "open"
+
+
+class MemoryUsageRecord(BaseModel):
+    memory_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    retrieval_score: float = Field(ge=0.0, le=1.0)
+    used_as: str
+    outcome: Literal["success", "verify", "harmful", "ignored"]
 
 
 class MemoryDecision(BaseModel):

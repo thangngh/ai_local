@@ -31,7 +31,7 @@ def evaluate_regression(
     decision: RegressionDecision
     if signal.laundered:
         decision = "reject_laundered_match"
-    elif signal.conflicted:
+    elif signal.conflicted or constraints_restored < constraints_required:
         decision = "verify_before_use"
     else:
         decision = "restore"

@@ -26,7 +26,7 @@ def decide_memory_sql(item: MemoryItem, noise_type: MemorySqlNoise = "none") -> 
 
 def decide_write(item: MemoryItem) -> MemoryDecision:
     layer = MEMORY_LAYER_POLICIES[item.memory_level]
-    if item.secret_like:
+    if item.secret_like or item.sensitivity == "secret":
         return _write(item, "reject_memory", "secret-like claims are not memory")
     if item.scope not in layer.scopes:
         return _write(item, "reject_memory", "memory scope not allowed for layer")
@@ -36,14 +36,31 @@ def decide_write(item: MemoryItem) -> MemoryDecision:
         return _write(item, "ask_user", "policy memory requires confirmation")
     if layer.requires_confirmation and not item.confirmed:
         return _write(item, "ask_user", "layer requires confirmed memory")
+    if not item.has_explicit_evidence:
+        return _write(item, "verify", "memory writes require explicit evidence")
+    if item.sensitivity == "sensitive" and not item.confirmed:
+        return _write(item, "ask_user", "sensitive memory requires confirmation")
     if item.evidence_strength < layer.min_evidence_strength:
         return _write(item, "verify", "memory evidence below layer threshold")
     return _write(item, "accept_memory", "memory write thresholds passed")
 
 
-def decide_retrieval(item: MemoryItem, *, requested_scope: str) -> MemoryDecision:
+def decide_retrieval(
+    item: MemoryItem,
+    *,
+    requested_scope: str,
+    requested_role: str | None = None,
+) -> MemoryDecision:
     if item.scope != requested_scope:
         return _retrieval(item, "drop", "wrong-scope memory cannot be injected")
+    if requested_role is not None and item.role != requested_role:
+        return _retrieval(item, "drop", "wrong-role memory cannot be injected")
+    if item.status in {"archived", "quarantined"}:
+        return _retrieval(item, "do_not_use", "inactive memory status cannot be injected")
+    if item.sensitivity in {"sensitive", "secret"} and not item.confirmed:
+        return _retrieval(item, "verify_before_use", "sensitive memory needs confirmation")
+    if not item.has_explicit_evidence:
+        return _retrieval(item, "verify_before_use", "memory is missing explicit evidence")
     if item.harmful_usage:
         return _retrieval(item, "archive_memory", "harmful usage history archives memory")
     if item.source_hash_changed:

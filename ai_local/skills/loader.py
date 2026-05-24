@@ -33,7 +33,22 @@ class SkillRegistry:
                 continue
             path = definition.get("path")
             if isinstance(path, str):
-                definitions[skill_id] = parse_skill_markdown(root / path)
+                parsed = parse_skill_markdown(root / path)
+                allowed_tools = definition.get("allowed_tools")
+                risk_level = definition.get("risk_level")
+                definitions[skill_id] = SkillDefinition(
+                    id=skill_id,
+                    name=parsed.name,
+                    description=parsed.description,
+                    allowed_tools=(
+                        [str(tool) for tool in allowed_tools]
+                        if isinstance(allowed_tools, list)
+                        else parsed.allowed_tools
+                    ),
+                    risk_level=str(risk_level) if isinstance(risk_level, str) else parsed.risk_level,
+                    trusted=bool(definition.get("trusted", parsed.trusted)),
+                    body=parsed.body,
+                )
         return cls(definitions)
 
     def get(self, skill_id: str) -> SkillDefinition:
@@ -53,15 +68,17 @@ def parse_skill_markdown(path: Path) -> SkillDefinition:
         raise ValueError(msg)
     _, frontmatter, body = content.split("---", 2)
     metadata = parse_simple_frontmatter(frontmatter)
-    allowed_tools = metadata.get("allowed_tools", [])
+    allowed_tools = metadata.get("allowed_tools", metadata.get("allowed-tools", []))
     if not isinstance(allowed_tools, list):
         allowed_tools = []
+    skill_id = metadata.get("id", metadata["name"])
+    risk_level = metadata.get("risk_level", metadata.get("risk-level", "low"))
     return SkillDefinition(
-        id=str(metadata["id"]),
+        id=str(skill_id),
         name=str(metadata["name"]),
         description=str(metadata["description"]),
         allowed_tools=[str(tool) for tool in allowed_tools],
-        risk_level=str(metadata["risk_level"]),
+        risk_level=str(risk_level),
         trusted=bool(metadata.get("trusted", False)),
         body=body.strip(),
     )

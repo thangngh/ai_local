@@ -1,0 +1,4 @@
+interface:
+  display_name: "Simple Workflow"
+  short_description: "Lightweight workflow for clarifying a task before execution."
+  default_prompt: "Use simple-workflow to clarify intent, propose options, choose a direction, and capture the next action."

@@ -14,6 +14,11 @@ skill_gate_levels:
         skill_id: web-research
         noise_type: tool_allowlist
         expected_decision: allow
+      - id: load_simple_workflow_skill
+        flow: requirement -> skill_registry -> load_skill
+        skill_id: simple-workflow
+        noise_type: none
+        expected_decision: allow
 
   medium:
     description: Skill output must bind to retrieval/evidence and cannot bypass rank.
@@ -28,6 +33,11 @@ skill_gate_levels:
       - id: skill_result_routes_to_knowledge_gate
         flow: skill -> web_search -> evidence_rank -> knowledge_gate
         skill_id: web-research
+        noise_type: weak_evidence
+        expected_decision: verify_more
+      - id: simple_workflow_requires_evidence_before_fact
+        flow: skill -> requirements -> knowledge_gate
+        skill_id: simple-workflow
         noise_type: weak_evidence
         expected_decision: verify_more
 
@@ -84,6 +94,13 @@ registered_skills:
     allowed_tools:
       - web_search
       - evidence_rank
+      - knowledge.search
+  simple-workflow:
+    path: skills/simple-workflow/SKILL.md
+    risk_level: low
+    trusted: false
+    allowed_tools:
+      - requirements.read
       - knowledge.search
 
 hard_rules:

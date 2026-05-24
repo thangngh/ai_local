@@ -5,9 +5,13 @@ MEMORY_SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {
         "memory_level",
         "scope",
         "source",
+        "source_hash",
         "confidence",
         "risk",
         "status",
+        "role",
+        "sensitivity",
+        "confirmed_by",
         "created_at",
         "updated_at",
         "expires_at",
@@ -53,3 +57,8 @@ MEMORY_SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {
 
 def schema_has_tables(required_tables: list[str]) -> bool:
     return all(table in MEMORY_SCHEMA_COLUMNS for table in required_tables)
+
+
+def schema_has_columns(table: str, required_columns: list[str]) -> bool:
+    columns = MEMORY_SCHEMA_COLUMNS.get(table, ())
+    return all(column in columns for column in required_columns)

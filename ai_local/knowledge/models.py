@@ -24,6 +24,14 @@ KnowledgeNoise = Literal[
     "current_api_uncertainty",
 ]
 KnowledgeDecision = Literal["use", "verify_more", "ask_user", "quarantine", "reject"]
+SourceAuthority = Literal[
+    "user_confirmed",
+    "project_file",
+    "project_doc",
+    "primary_external",
+    "secondary_external",
+    "untrusted_context",
+]
 EvidenceNoise = Literal[
     "none",
     "unknown_source",
@@ -36,7 +44,7 @@ EvidenceNoise = Literal[
     "deep_context_noise",
 ]
 EvidenceBand = Literal["canonical", "strong", "caution", "weak", "reject"]
-ConflictDecision = Literal["ask_user", "defer_until_evidence", "stop"]
+ConflictDecision = Literal["use_candidate", "ask_user", "defer_until_evidence", "stop"]
 ConflictType = Literal[
     "equal_authority_equal_evidence",
     "multi_instance_tie",
@@ -48,6 +56,13 @@ ConflictType = Literal[
 ]
 
 
+class SourceReference(BaseModel):
+    ref: str = Field(min_length=1)
+    authority: SourceAuthority
+    snippet: str = Field(default="", max_length=500)
+    observed_at: str | None = None
+
+
 class KnowledgeItem(BaseModel):
     claim: str
     level: KnowledgeLevel
@@ -57,6 +72,17 @@ class KnowledgeItem(BaseModel):
     evidence_strength: float = Field(default=0.0, ge=0.0, le=1.0)
     conflict_score: float = Field(default=0.0, ge=0.0, le=1.0)
     noise_type: KnowledgeNoise = "none"
+    source_refs: list[SourceReference] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    provenance: str = ""
+    conflict_ref: str | None = None
+
+    @property
+    def all_source_refs(self) -> tuple[str, ...]:
+        refs = [source.ref for source in self.source_refs]
+        if self.source_ref and self.source_ref not in refs:
+            refs.insert(0, self.source_ref)
+        return tuple(refs)
 
 
 class KnowledgeGateDecision(BaseModel):
@@ -95,3 +121,4 @@ class ConflictResolution(BaseModel):
     candidates: list[ConflictCandidate] = Field(min_length=2)
     decision: ConflictDecision
     reason: str
+    selected_candidate_id: str | None = None
