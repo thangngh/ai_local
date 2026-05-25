@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import typer
@@ -41,6 +42,17 @@ from ai_local.indexer.project import (
     refresh_project_index,
 )
 from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+from ai_local.pipeline.audit_chain import PipelineAuditChainStore
+from ai_local.pipeline.phase9_close import run_phase9_close
+from ai_local.pipeline.report import Phase9ReportScenario, run_phase9_integration_report
+from ai_local.pipeline.replay import run_phase9_replay_fixtures
+from ai_local.pipeline.stress import run_phase9_stress_cases
+from ai_local.skills.store import (
+    InstalledSkillStore,
+    cleanup_stale_installed_skills,
+    rebuild_installed_skill_registry,
+    refresh_installed_skill_registry,
+)
 
 app = typer.Typer()
 
@@ -281,6 +293,64 @@ def project_index_rebuild(
     typer.echo(
         f"REBUILD indexed={len(batch.documents)} deleted={len(batch.deleted_paths)} "
         f"skipped={len(batch.skipped_paths)}"
+    )
+
+
+@app.command()
+def skill_registry_refresh(
+    root: Path = typer.Option(Path(".codex/skills")),
+    metadata_db: Path = typer.Option(Path("metadata.db")),
+    audit_ref: str | None = typer.Option(None),
+) -> None:
+    result = refresh_installed_skill_registry(
+        root,
+        InstalledSkillStore(metadata_db),
+        audit_ref=audit_ref,
+    )
+    typer.echo(
+        f"SKILL_REGISTRY_REFRESH upserted={len(result.upserted)} "
+        f"unchanged={len(result.unchanged)} deleted={len(result.deleted)} "
+        f"skipped={len(result.skipped)}"
+    )
+
+
+@app.command()
+def skill_registry_cleanup(
+    root: Path = typer.Option(Path(".codex/skills")),
+    metadata_db: Path = typer.Option(Path("metadata.db")),
+) -> None:
+    deleted = cleanup_stale_installed_skills(root, InstalledSkillStore(metadata_db))
+    typer.echo(f"SKILL_REGISTRY_CLEANUP deleted={len(deleted)}")
+
+
+@app.command()
+def skill_registry_rebuild(
+    root: Path = typer.Option(Path(".codex/skills")),
+    metadata_db: Path = typer.Option(Path("metadata.db")),
+    audit_ref: str | None = typer.Option(None),
+) -> None:
+    result = rebuild_installed_skill_registry(
+        root,
+        InstalledSkillStore(metadata_db),
+        audit_ref=audit_ref,
+    )
+    typer.echo(
+        f"SKILL_REGISTRY_REBUILD upserted={len(result.upserted)} "
+        f"deleted={len(result.deleted)} skipped={len(result.skipped)}"
+    )
+
+
+@app.command()
+def skill_registry_stats(
+    root: Path = typer.Option(Path(".codex/skills")),
+    metadata_db: Path = typer.Option(Path("metadata.db")),
+) -> None:
+    store = InstalledSkillStore(metadata_db)
+    store.initialize()
+    stats = store.stats(root=root)
+    typer.echo(
+        f"SKILL_REGISTRY_STATS packages={stats.packages} "
+        f"trusted={stats.trusted} stale={stats.stale}"
     )
 
 
@@ -718,6 +788,117 @@ def developer_sprints(
     if result.errors:
         for error in result.errors:
             typer.echo(error)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def phase9_integration_report(
+    scenario: Phase9ReportScenario = typer.Option("ready"),
+    workspace_root: Path = typer.Option(Path(".")),
+    patch_levels_config: Path = typer.Option(Path("configs/patch_levels.yaml")),
+    audit_db: Path | None = typer.Option(None),
+    output: Path | None = typer.Option(None),
+) -> None:
+    report = run_phase9_integration_report(
+        scenario=scenario,
+        workspace_root=workspace_root,
+        patch_levels_config=patch_levels_config,
+        audit_db=audit_db,
+    )
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+    typer.echo(payload)
+
+
+@app.command()
+def phase9_audit_chains(
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    summaries = PipelineAuditChainStore(audit_db).list_summaries()
+    for summary in summaries:
+        typer.echo(
+            f"CHAIN {summary.chain_id} scenario={summary.scenario} "
+            f"status={summary.status} final_state={summary.final_state} "
+            f"evidence={summary.evidence_count} audit_events={summary.audit_event_count}"
+        )
+
+
+@app.command()
+def phase9_replay(
+    config: Path = typer.Option(Path("configs/phase9_replay_fixtures.yaml")),
+    workspace_root: Path = typer.Option(Path(".")),
+    patch_levels_config: Path = typer.Option(Path("configs/patch_levels.yaml")),
+    audit_db: Path | None = typer.Option(None),
+) -> None:
+    results = run_phase9_replay_fixtures(
+        config_path=config,
+        workspace_root=workspace_root,
+        patch_levels_config=patch_levels_config,
+        audit_db=audit_db,
+    )
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        chain = f" chain={result.chain_id}" if result.chain_id is not None else ""
+        typer.echo(
+            f"{status} {result.fixture_id} scenario={result.scenario} "
+            f"status={result.status} final_state={result.final_state}{chain}"
+        )
+        if result.reasons:
+            failed = True
+            for reason in result.reasons:
+                typer.echo(reason)
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def phase9_stress(
+    config: Path = typer.Option(Path("configs/phase9_stress_gates.yaml")),
+    workspace_root: Path = typer.Option(Path(".phase9-stress")),
+) -> None:
+    results = run_phase9_stress_cases(config_path=config, workspace_root=workspace_root)
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        metrics = " ".join(f"{key}={value}" for key, value in sorted(result.metrics.items()))
+        typer.echo(
+            f"{status} {result.case_id} kind={result.kind} "
+            f"hop_depth={result.hop_depth} {metrics}"
+        )
+        if result.reasons:
+            failed = True
+            for reason in result.reasons:
+                typer.echo(reason)
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def phase9_close(
+    replay_config: Path = typer.Option(Path("configs/phase9_replay_fixtures.yaml")),
+    stress_config: Path = typer.Option(Path("configs/phase9_stress_gates.yaml")),
+    workspace_root: Path = typer.Option(Path(".phase9-close")),
+    patch_levels_config: Path = typer.Option(Path("configs/patch_levels.yaml")),
+    audit_db: Path | None = typer.Option(None),
+) -> None:
+    result = run_phase9_close(
+        replay_config=replay_config,
+        stress_config=stress_config,
+        workspace_root=workspace_root,
+        patch_levels_config=patch_levels_config,
+        audit_db=audit_db,
+    )
+    status = "PASS" if result.passed else "FAIL"
+    typer.echo(
+        f"{status} phase9_close replay={result.replay_passed}/{result.replay_total} "
+        f"stress={result.stress_passed}/{result.stress_total}"
+    )
+    if result.reasons:
+        for reason in result.reasons:
+            typer.echo(reason)
         raise typer.Exit(code=1)
 
 

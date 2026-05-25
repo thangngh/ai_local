@@ -14,6 +14,10 @@ developer_phase:
       label: Knowledge
     - id: phase_6_skills
       label: Skills
+    - id: phase_7_skill_distribution
+      label: Skill distribution
+    - id: phase_8_skill_runtime
+      label: Skill runtime integration
 
   functional_requirements:
     - id: F-CORE-001
@@ -104,6 +108,38 @@ developer_phase:
       name: SKILL.md loader, registry, and skill workflow integration
       phase: phase_6_skills
       gate_harnesses: [skills, tool_combo]
+    - id: F-SKILL-002
+      name: Skill package trust and source verification
+      phase: phase_7_skill_distribution
+      gate_harnesses: [skills, operational_safety, prompt_injection, noise]
+    - id: F-SKILL-003
+      name: Skill script sandbox and side-effect policy
+      phase: phase_7_skill_distribution
+      gate_harnesses: [tool_combo, operational_safety, patch_pipeline, skills]
+    - id: F-SKILL-004
+      name: Skill install and update lifecycle
+      phase: phase_7_skill_distribution
+      gate_harnesses: [skills, request_lifecycle, operational_safety]
+    - id: F-SKILLRT-001
+      name: Controlled skill installer adapter
+      phase: phase_8_skill_runtime
+      gate_harnesses: [skills, operational_safety, patch_pipeline]
+    - id: F-SKILLRT-002
+      name: Installed skill registry and stale cleanup
+      phase: phase_8_skill_runtime
+      gate_harnesses: [skills, request_lifecycle, memory_sql]
+    - id: F-SKILLRT-003
+      name: Skill script runner integration
+      phase: phase_8_skill_runtime
+      gate_harnesses: [tool_combo, operational_safety, confirmation, patch_pipeline]
+    - id: F-SKILLRT-004
+      name: Skill audit and evidence handoff integration
+      phase: phase_8_skill_runtime
+      gate_harnesses: [evidence_rank, request_lifecycle, operational_safety]
+    - id: F-SKILLRT-005
+      name: Agent loop skill runtime path
+      phase: phase_8_skill_runtime
+      gate_harnesses: [agent_loop, skills, tool_combo, evidence_rank]
 
   non_functional_requirements:
     - id: NF-SAFE-001

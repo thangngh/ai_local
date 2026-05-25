@@ -1,0 +1,38 @@
+{
+  "audit_event_count": 2,
+  "conflict_profile": "no_path",
+  "evidence_refs": [
+    "docs/phase-09-improvement-plan.md:integration-output",
+    "audit://skill.script.run/pkg.phase9.integration:phase9-report/succeeded/2026-05-25T07:59:18.507004+00:00",
+    "command://D:\\2026\\agent_new\\ai_local\\.venv\\Scripts\\python.exe -c print('conflict evidence')"
+  ],
+  "final_state": "ROLLBACK",
+  "hop_depth": 50,
+  "noise_profile": "none",
+  "output_ready": false,
+  "patch_decision": "rollback",
+  "patch_next_stage": "ROLLBACK",
+  "plan_decision": "continue",
+  "reasons": [
+    "retrieval decision continue",
+    "skill runtime output is data until evidence ranked",
+    "semantic review failed",
+    "patch retry budget exhausted"
+  ],
+  "risk_flags": [],
+  "scenario": "no-path",
+  "skill_decision": "succeeded",
+  "skill_route": "DONE",
+  "stages": [
+    "TASK_INTAKE",
+    "PLAN_GATE",
+    "RETRIEVE_CONTEXT",
+    "CONTEXT_GATE",
+    "TOOL_REGISTRY",
+    "SKILL_RUNTIME",
+    "EVIDENCE_RANK",
+    "PATCH_PIPELINE",
+    "ROLLBACK"
+  ],
+  "status": "rollback"
+}

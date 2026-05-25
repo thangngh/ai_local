@@ -20,6 +20,14 @@ main Notion phase order.
 | Sprint 07 | Knowledge | `F-KNOW-001` | Knowledge cards, evidence rank, and conflict resolver |
 | Sprint 08 | Knowledge | `F-KNOW-002` | Memory layers, SQL, governance, and regression |
 | Sprint 09 | Skills | `F-SKILL-001` | Skill loader and permission-aware tool integration |
+| Phase 7 Sprint 01 | Skill distribution | `F-SKILL-002` | Package identity, source verification, checksum, trust, and install audit |
+| Phase 7 Sprint 02 | Skill distribution | `F-SKILL-003` | Script sandbox, side-effect policy, approvals, and output handoff |
+| Phase 7 Sprint 03 | Skill distribution | `F-SKILL-004` | Install/update lifecycle, controlled root, rollback, and audit evidence |
+| Phase 8 Sprint 01 | Skill runtime | `F-SKILLRT-001` | Controlled installer adapter, staging, atomic install, and rollback |
+| Phase 8 Sprint 02 | Skill runtime | `F-SKILLRT-002` | Installed registry, stale cleanup, and index refresh commands |
+| Phase 8 Sprint 03 | Skill runtime | `F-SKILLRT-003` | Script runner integration with subprocess allowlist and approval |
+| Phase 8 Sprint 04 | Skill runtime | `F-SKILLRT-004` | Audit and evidence handoff for install, update, and script outputs |
+| Phase 8 Sprint 05 | Skill runtime | `F-SKILLRT-005` | Agent-loop skill runtime path and Phase 8 close gates |
 
 ## Functional Gate Work
 
@@ -47,6 +55,14 @@ main Notion phase order.
 | `F-KNOW-001` | `knowledge`, `evidence-rank`, `multi-conflict --max-level hard` |
 | `F-KNOW-002` | `memory-layers`, `memory-sql`, `memory-governance`, `memory-regression` |
 | `F-SKILL-001` | `skills`, `tool-combo --max-level hard` |
+| `F-SKILL-002` | `skills`, `operational-safety --max-level hard`, `prompt-injection`, `noise` |
+| `F-SKILL-003` | `tool-combo --max-level hard`, `operational-safety --max-level hard`, `patch-pipeline`, `skills` |
+| `F-SKILL-004` | `skills`, `request-lifecycle`, `operational-safety --max-level hard`, `global-developer`, `developer-sprints` |
+| `F-SKILLRT-001` | `skills`, `operational-safety --max-level hard`, `patch-pipeline`, `global-developer` |
+| `F-SKILLRT-002` | `skills`, `request-lifecycle`, `memory-sql`, `developer-sprints` |
+| `F-SKILLRT-003` | `tool-combo --max-level hard`, `operational-safety --max-level hard`, `confirmation --max-level hard`, `patch-pipeline` |
+| `F-SKILLRT-004` | `evidence-rank`, `request-lifecycle`, `operational-safety --max-level hard`, `conflict-paths --max-level hard` |
+| `F-SKILLRT-005` | `agent-loop --max-level hard`, `skills`, `tool-combo --max-level hard`, `evidence-rank`, `global-developer`, `developer-sprints` |
 
 ## Before And After Gate Summary
 

@@ -1,13 +1,23 @@
+from ai_local.audit.store import InMemoryAuditStore, make_audit_event
 from ai_local.skills.loader import SkillDefinition, SkillRegistry
 from ai_local.skills.models import (
     SkillDecision,
     SkillDecisionResult,
+    SkillLifecycleDecision,
+    SkillLifecycleRequest,
+    SkillLifecycleResult,
     SkillNextGate,
     SkillOutputDecision,
     SkillOutputEnvelope,
     SkillOutputHandoff,
     SkillOutputKind,
+    SkillPackageManifest,
+    SkillPackageTrustDecision,
+    SkillPackageTrustResult,
     SkillRequest,
+    SkillScriptDecision,
+    SkillScriptRequest,
+    SkillScriptSandboxResult,
 )
 from ai_local.tools.registry import ToolRegistry
 
@@ -152,6 +162,338 @@ def route_skill_output(envelope: SkillOutputEnvelope) -> SkillOutputHandoff:
         "rank_evidence",
         "evidence_rank",
         "skill output is data until evidence ranked",
+    )
+
+
+def verify_skill_package(
+    manifest: SkillPackageManifest,
+    *,
+    expected_checksum: str | None = None,
+    allowed_source_prefixes: list[str] | None = None,
+    audit_store: InMemoryAuditStore | None = None,
+) -> SkillPackageTrustResult:
+    result = _verify_skill_package(
+        manifest,
+        expected_checksum=expected_checksum,
+        allowed_source_prefixes=allowed_source_prefixes or [],
+    )
+    if audit_store is not None:
+        audit_store.append(
+            make_audit_event(
+                "skill.package.verify",
+                result.package_id or "unknown-package",
+                result.decision,
+            )
+        )
+    return result
+
+
+def evaluate_skill_script(
+    request: SkillScriptRequest,
+    *,
+    tools: ToolRegistry,
+    audit_store: InMemoryAuditStore | None = None,
+) -> SkillScriptSandboxResult:
+    result = _evaluate_skill_script(request, tools=tools)
+    if audit_store is not None:
+        audit_store.append(
+            make_audit_event(
+                "skill.script.policy",
+                f"{request.package.package_id or 'unknown-package'}:{request.script_id}",
+                result.decision,
+            )
+        )
+    return result
+
+
+def evaluate_skill_lifecycle(
+    request: SkillLifecycleRequest,
+    *,
+    audit_store: InMemoryAuditStore | None = None,
+) -> SkillLifecycleResult:
+    result = _evaluate_skill_lifecycle(request)
+    if audit_store is not None:
+        audit_store.append(
+            make_audit_event(
+                f"skill.lifecycle.{request.action}",
+                request.package.package_id or "unknown-package",
+                result.decision,
+            )
+        )
+    return result
+
+
+def _evaluate_skill_lifecycle(request: SkillLifecycleRequest) -> SkillLifecycleResult:
+    package = request.package
+    if package.decision == "quarantine" or request.policy_shadowing_detected:
+        return _lifecycle_result(
+            request,
+            "quarantine",
+            "package lifecycle contains policy shadowing",
+            next_gate="quarantine",
+        )
+    if package.decision != "allow" or not package.trusted:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires verified package trust",
+            next_gate="tool_registry",
+        )
+    if not request.controlled_root:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires controlled skill root",
+            next_gate="tool_registry",
+        )
+    if not request.manifest_inspected:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires manifest inspection",
+            next_gate="knowledge_gate",
+        )
+    if not request.frontmatter_valid:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires valid skill frontmatter",
+            next_gate="knowledge_gate",
+        )
+    if not request.checksum_verified:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires checksum verification",
+            next_gate="evidence_rank",
+        )
+    if not request.source_verified:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires source verification",
+            next_gate="evidence_rank",
+        )
+    if not request.risk_classified:
+        return _lifecycle_result(
+            request,
+            "deny",
+            "install lifecycle requires risk classification",
+            next_gate="decision_gate",
+        )
+    if request.lifecycle_failure_detected:
+        if request.rollback_available:
+            return _lifecycle_result(
+                request,
+                "rollback",
+                "lifecycle failure requires rollback",
+                next_gate="patch_pipeline",
+                rollback_required=True,
+            )
+        return _lifecycle_result(
+            request,
+            "deny",
+            "lifecycle failure has no rollback path",
+            next_gate="stop",
+        )
+    if request.action == "update":
+        if not request.previous_package_id:
+            return _lifecycle_result(
+                request,
+                "deny",
+                "update lifecycle requires previous package audit reference",
+                next_gate="request_lifecycle",
+            )
+        if not request.rollback_available:
+            return _lifecycle_result(
+                request,
+                "deny",
+                "update lifecycle requires rollback availability",
+                next_gate="patch_pipeline",
+            )
+        return _lifecycle_result(
+            request,
+            "allow_update",
+            "skill update lifecycle verified",
+            next_gate="evidence_rank",
+        )
+    return _lifecycle_result(
+        request,
+        "allow_install",
+        "skill install lifecycle verified",
+        next_gate="evidence_rank",
+    )
+
+
+def _lifecycle_result(
+    request: SkillLifecycleRequest,
+    decision: SkillLifecycleDecision,
+    reason: str,
+    *,
+    next_gate: SkillNextGate,
+    rollback_required: bool = False,
+) -> SkillLifecycleResult:
+    return SkillLifecycleResult(
+        package_id=request.package.package_id,
+        skill_id=request.package.skill_id,
+        action=request.action,
+        decision=decision,
+        reason=reason,
+        controlled_root=request.controlled_root,
+        rollback_required=rollback_required,
+        audit_required=True,
+        next_gate=next_gate,
+    )
+
+
+def _evaluate_skill_script(
+    request: SkillScriptRequest,
+    *,
+    tools: ToolRegistry,
+) -> SkillScriptSandboxResult:
+    package = request.package
+    if package.decision == "quarantine":
+        return _script_result(
+            request,
+            "quarantine",
+            "package trust is quarantined",
+            tools=tools,
+            next_gate="quarantine",
+        )
+    if package.decision != "allow" or not package.trusted:
+        return _script_result(
+            request,
+            "deny",
+            "scripts are disabled unless package trust is verified",
+            tools=tools,
+            next_gate="tool_registry",
+        )
+    tool = tools.find(request.tool_name)
+    if tool is None:
+        return _script_result(
+            request,
+            "deny",
+            "script tool is not registered",
+            tools=tools,
+            next_gate="tool_registry",
+        )
+    if request.tool_name not in request.declared_tools:
+        return _script_result(
+            request,
+            "deny",
+            "script tool is not declared by package policy",
+            tools=tools,
+            next_gate="tool_registry",
+        )
+    if tool.side_effect_level in {"write", "process", "network"} and not (
+        request.approved or request.allow_trusted_side_effects
+    ):
+        return _script_result(
+            request,
+            "ask_user",
+            "script side effect requires approval or trusted package policy",
+            tools=tools,
+            next_gate="confirmation",
+        )
+    next_gate: SkillNextGate = "evidence_rank" if request.output_has_evidence_refs else "knowledge_gate"
+    reason = (
+        "script output is data until evidence ranked"
+        if request.output_has_evidence_refs
+        else "script output lacks evidence refs"
+    )
+    return _script_result(request, "allow", reason, tools=tools, next_gate=next_gate)
+
+
+def _script_result(
+    request: SkillScriptRequest,
+    decision: SkillScriptDecision,
+    reason: str,
+    *,
+    tools: ToolRegistry,
+    next_gate: SkillNextGate,
+) -> SkillScriptSandboxResult:
+    tool = tools.find(request.tool_name)
+    return SkillScriptSandboxResult(
+        package_id=request.package.package_id,
+        script_id=request.script_id,
+        tool_name=request.tool_name,
+        decision=decision,
+        reason=reason,
+        tool_registered=tool is not None,
+        tool_declared=request.tool_name in request.declared_tools,
+        side_effect_level=tool.side_effect_level if tool is not None else None,
+        requires_approval=bool(tool and tool.approval_required),
+        audit_required=True,
+        next_gate=next_gate,
+    )
+
+
+def _verify_skill_package(
+    manifest: SkillPackageManifest,
+    *,
+    expected_checksum: str | None,
+    allowed_source_prefixes: list[str],
+) -> SkillPackageTrustResult:
+    missing = [
+        field
+        for field, value in {
+            "package_id": manifest.package_id,
+            "skill_id": manifest.skill_id,
+            "source_ref": manifest.source_ref,
+            "checksum": manifest.checksum,
+            "manifest_identity": manifest.manifest_identity,
+        }.items()
+        if not value
+    ]
+    if missing:
+        return _package_result(manifest, "deny", f"package manifest missing {missing[0]}")
+    if manifest.trusted is None:
+        return _package_result(manifest, "deny", "package trust state is missing")
+    if _contains_policy_shadowing(manifest):
+        return _package_result(manifest, "quarantine", "package manifest contains policy shadowing")
+    if allowed_source_prefixes and not any(
+        str(manifest.source_ref).startswith(prefix) for prefix in allowed_source_prefixes
+    ):
+        return _package_result(manifest, "deny", "package source is not trusted")
+    if expected_checksum is not None and manifest.checksum != expected_checksum:
+        return _package_result(manifest, "deny", "package checksum mismatch")
+    if not manifest.trusted:
+        return _package_result(manifest, "deny", "package is untrusted")
+    if manifest.manifest_identity != manifest.skill_id:
+        return _package_result(manifest, "deny", "manifest identity does not match skill id")
+    return _package_result(manifest, "allow", "package trust verified")
+
+
+def _contains_policy_shadowing(manifest: SkillPackageManifest) -> bool:
+    joined = " ".join(
+        value.lower()
+        for value in [
+            manifest.package_id,
+            manifest.skill_id,
+            manifest.source_ref,
+            manifest.manifest_identity,
+        ]
+        if value
+    )
+    blocked = ("ignore policy", "override policy", "disable gate", "bypass approval")
+    return any(term in joined for term in blocked)
+
+
+def _package_result(
+    manifest: SkillPackageManifest,
+    decision: SkillPackageTrustDecision,
+    reason: str,
+) -> SkillPackageTrustResult:
+    return SkillPackageTrustResult(
+        package_id=manifest.package_id,
+        skill_id=manifest.skill_id,
+        decision=decision,
+        reason=reason,
+        source_ref=manifest.source_ref,
+        checksum=manifest.checksum,
+        trusted=bool(manifest.trusted),
+        signed=manifest.signed,
+        install_audit_required=True,
     )
 
 

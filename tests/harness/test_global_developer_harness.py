@@ -20,8 +20,10 @@ def test_global_developer_harness_covers_main_notion_phases() -> None:
         "phase_4_evaluation",
         "phase_5_knowledge",
         "phase_6_skills",
+        "phase_7_skill_distribution",
+        "phase_8_skill_runtime",
     ]
-    assert len(coverage.functional_requirements) == 22
+    assert len(coverage.functional_requirements) == 30
     assert all(requirement.gate_harnesses for requirement in coverage.functional_requirements)
 
 
@@ -38,6 +40,6 @@ def test_global_developer_harness_runs() -> None:
     )
 
     assert result.passed
-    assert result.functional_count == 22
+    assert result.functional_count == 30
     assert result.non_functional_count == 6
     assert result.gate_count >= 25

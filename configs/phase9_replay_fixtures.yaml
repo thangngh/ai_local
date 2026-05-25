@@ -1,0 +1,74 @@
+fixtures:
+  - id: phase9_ready_output
+    scenario: ready
+    expected_status: done
+    expected_final_state: DECISION_GATE
+    expected_patch_decision: accept
+    expected_skill_decision: succeeded
+    expected_output_ready: true
+    expected_hop_depth: 12
+    expected_noise_profile: vi_en_mixed
+    expected_conflict_profile: none
+    required_stages:
+      - TASK_INTAKE
+      - PLAN_GATE
+      - RETRIEVE_CONTEXT
+      - SKILL_RUNTIME
+      - EVIDENCE_RANK
+      - PATCH_PIPELINE
+      - DECISION_GATE
+    required_evidence_prefixes:
+      - docs/phase-09-improvement-plan.md
+      - audit://skill.script.run
+      - command://
+    forbidden_risk_flags:
+      - prompt_injection
+      - deep_policy_shadowing
+
+  - id: phase9_no_path_rollback
+    scenario: no-path
+    expected_status: rollback
+    expected_final_state: ROLLBACK
+    expected_patch_decision: rollback
+    expected_skill_decision: succeeded
+    expected_output_ready: false
+    expected_hop_depth: 50
+    expected_noise_profile: none
+    expected_conflict_profile: no_path
+    required_stages:
+      - TASK_INTAKE
+      - RETRIEVE_CONTEXT
+      - SKILL_RUNTIME
+      - PATCH_PIPELINE
+      - ROLLBACK
+    required_reasons:
+      - semantic review failed
+      - patch retry budget exhausted
+    required_evidence_prefixes:
+      - docs/phase-09-improvement-plan.md
+      - audit://skill.script.run
+    forbidden_risk_flags:
+      - prompt_injection
+
+  - id: phase9_prompt_injection_quarantine
+    scenario: prompt-injection
+    expected_status: quarantine
+    expected_final_state: QUARANTINE
+    expected_patch_decision: null
+    expected_skill_decision: null
+    expected_output_ready: false
+    expected_hop_depth: 25
+    expected_noise_profile: prompt_injection
+    expected_conflict_profile: security_conflict
+    required_stages:
+      - TASK_INTAKE
+      - PLAN_GATE
+      - RETRIEVE_CONTEXT
+      - CONTEXT_GATE
+    forbidden_stages:
+      - SKILL_RUNTIME
+      - PATCH_PIPELINE
+    required_risk_flags:
+      - prompt_injection
+    required_reasons:
+      - retrieval decision quarantine

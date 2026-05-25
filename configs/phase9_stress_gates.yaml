@@ -1,0 +1,32 @@
+stress_cases:
+  - id: phase9_retriever_incremental_load
+    kind: retriever
+    hop_depth: 20
+    file_count: 32
+    chunk_lines: 4
+    query: needle evidence
+    expected_decision: continue
+    expected_first_indexed: 32
+    expected_second_unchanged: 32
+    expected_min_hits: 5
+
+  - id: phase9_queue_retry_budget
+    kind: queue
+    hop_depth: 30
+    job_count: 12
+    failing_jobs: 4
+    max_attempts: 2
+    expected_succeeded: 8
+    expected_dead_letter: 4
+    expected_audit_events: 16
+
+  - id: phase9_worker_timeout_dead_letter
+    kind: worker_timeout
+    hop_depth: 50
+    job_count: 3
+    max_attempts: 2
+    expected_dead_letter: 3
+    expected_timeout_errors: 3
+    expected_audit_events: 6
+
+max_supported_hop_depth: 50

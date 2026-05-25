@@ -19,6 +19,7 @@ _TEXT_SUFFIXES = {
     ".yml",
     ".json",
     ".sql",
+    ".rs",
     ".js",
     ".ts",
     ".tsx",
@@ -159,6 +160,7 @@ def _language_for(path: Path) -> str:
         "js": "javascript",
         "ts": "typescript",
         "tsx": "typescript",
+        "rs": "rust",
     }.get(path.suffix.lstrip("."), "text")
 
 
@@ -179,7 +181,8 @@ def _unchanged(previous: IndexManifestEntry | None, current: IndexManifestEntry)
 
 
 def _ignored_path(path: Path) -> bool:
-    return any(part in {".git", ".venv", "__pycache__", "node_modules"} for part in path.parts)
+    ignored = {".git", ".venv", "__pycache__", "node_modules", "dist", "target"}
+    return any(part in ignored for part in path.parts)
 
 
 def _path_ref(path: Path, root: Path | None) -> str:

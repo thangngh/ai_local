@@ -15,6 +15,8 @@ Source processed on this pass:
 | Phase 4 | Evaluation | Evaluator JSON, score/rank, decision, confirmation |
 | Phase 5 | Knowledge | Knowledge DB, evidence store, ranker, conflict resolver, claim verifier |
 | Phase 6 | Skills | Skill loader, registry, scripts, permission integration |
+| Phase 7 | Skill distribution | Package trust, script sandbox, install/update lifecycle |
+| Phase 8 | Skill runtime integration | Controlled installer, installed registry, script runner, audit/evidence, agent-loop runtime path |
 
 ## Functional Requirements
 
@@ -35,6 +37,8 @@ Every developer functional item is mapped to gate harness coverage in
 | Knowledge | Knowledge rank and conflict resolution | `knowledge`, `evidence_rank`, `multi_conflict` |
 | Knowledge | Memory layers and governance | `memory_layers`, `memory_sql`, `memory_governance`, `memory_regression` |
 | Skills | Skill loader and workflow integration | `skills`, `tool_combo` |
+| Skill distribution | Package trust, sandbox, install lifecycle | `skills`, `operational_safety`, `request_lifecycle` |
+| Skill runtime | Installer, registry, script runner, audit handoff, agent-loop path | `skills`, `tool_combo`, `agent_loop`, `evidence_rank` |
 
 ## Non-Functional Requirements
 

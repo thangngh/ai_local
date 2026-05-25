@@ -24,3 +24,11 @@
 | `F-KNOW-001` | State knowledge level, evidence authority, rank impact, and expected conflict behavior. | Report whether knowledge, rank, and conflict gates avoid unsupported facts. |
 | `F-KNOW-002` | State memory scope, evidence, freshness, conflict, and deep-hop risk. | Report whether memory gates preserve write, retrieval, governance, and regression behavior. |
 | `F-SKILL-001` | State skill trust, allowed tools, module bridge, and workflow evidence. | Report whether skill and tool gates preserve permission-aware integration. |
+| `F-SKILL-002` | State package source ref, checksum, manifest identity, trust state, and deny-by-default branch. | Report whether package trust gates reject missing source, checksum, manifest, or trust policy. |
+| `F-SKILL-003` | State script trust, declared tool permission, side-effect type, approval need, and audit fields. | Report whether script sandbox gates prevent side-effect, approval, patch, or evidence bypass. |
+| `F-SKILL-004` | State discovery, manifest inspection, verification, controlled install root, rollback, and audit refs. | Report whether install/update lifecycle gates refuse malformed or policy-shadowing skills and preserve rollback evidence. |
+| `F-SKILLRT-001` | State staging root, target root, atomic install, rollback artifact, malformed package refusal, and audit event. | Report whether controlled installer gates keep writes bounded and failed installs reversible. |
+| `F-SKILLRT-002` | State installed package metadata, stale cleanup, index refresh, and lifecycle audit reference. | Report whether registry gates keep installed state aligned with disk and SQL metadata. |
+| `F-SKILLRT-003` | State package trust, declared tool, subprocess command, cwd, timeout, side effect, approval, and output routing. | Report whether runner gates prevent allowlist, approval, timeout, patch, or evidence bypass. |
+| `F-SKILLRT-004` | State event ids, package refs, script output refs, evidence kind, conflict class, and unsafe output routing. | Report whether audit and evidence gates keep skill output data-only until ranked. |
+| `F-SKILLRT-005` | State selected skill, package state, script result, evidence refs, decision branch, retry or confirmation path, and rollback risk. | Report whether agent-loop gates integrate skill runtime without bypassing decisions or evidence. |

@@ -219,3 +219,110 @@ developer_sprints:
             - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level hard
           before_gate_summary: Skill patch states skill trust, allowed tools, module bridge, and evidence expected from the workflow.
           after_gate_summary: Skill and tool gates confirm the skill path integrates with permissions and cross-module evidence decisions.
+
+    - id: phase_07_sprint_01_skill_package_trust
+      phase: phase_7_skill_distribution
+      objective: Establish package identity, source verification, checksum, trust, and install audit boundaries.
+      functionals:
+        - id: F-SKILL-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli prompt-injection
+            - .\.venv\Scripts\python -m ai_local.cli noise
+          before_gate_summary: Package trust patch states source ref, checksum, trust state, manifest identity, and deny-by-default path before install behavior changes.
+          after_gate_summary: Skill, operational, prompt-injection, and noise gates show missing source, checksum, manifest, or trust state fails closed.
+
+    - id: phase_07_sprint_02_skill_script_sandbox
+      phase: phase_7_skill_distribution
+      objective: Constrain bundled skill scripts, side effects, approvals, and script output handoff.
+      functionals:
+        - id: F-SKILL-003
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli skills
+          before_gate_summary: Script sandbox patch states script trust, declared tool permission, write/process/network side effect, approval requirement, and audit fields before execution behavior changes.
+          after_gate_summary: Tool, operational, patch, and skill gates show script execution cannot bypass side-effect, approval, patch, or output evidence gates.
+
+    - id: phase_07_sprint_03_skill_install_update_lifecycle
+      phase: phase_7_skill_distribution
+      objective: Add skill install/update lifecycle with verification, controlled root, rollback, and audit evidence.
+      functionals:
+        - id: F-SKILL-004
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli request-lifecycle
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli global-developer
+            - .\.venv\Scripts\python -m ai_local.cli developer-sprints
+          before_gate_summary: Install lifecycle patch states discovery, manifest inspection, checksum/source verification, risk classification, controlled install root, rollback, and audit refs before lifecycle changes.
+          after_gate_summary: Skill, lifecycle, operational, and developer gates show install/update refuses malformed or policy-shadowing skills and keeps rollback/audit behavior explicit.
+
+    - id: phase_08_sprint_01_controlled_skill_installer
+      phase: phase_8_skill_runtime
+      objective: Implement a controlled skill installer adapter with staging, atomic install, and rollback policy.
+      functionals:
+        - id: F-SKILLRT-001
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+            - .\.venv\Scripts\python -m ai_local.cli global-developer
+          before_gate_summary: Installer patch states staging root, target root, atomic move, rollback artifact, malformed package refusal, and audit event before filesystem writes.
+          after_gate_summary: Skill, operational, and patch gates show installer writes stay inside controlled roots and failed installs roll back with evidence.
+
+    - id: phase_08_sprint_02_installed_skill_registry
+      phase: phase_8_skill_runtime
+      objective: Add installed skill state registry, stale package cleanup, and index refresh commands.
+      functionals:
+        - id: F-SKILLRT-002
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli request-lifecycle
+            - .\.venv\Scripts\python -m ai_local.cli memory-sql
+            - .\.venv\Scripts\python -m ai_local.cli developer-sprints
+          before_gate_summary: Registry patch states installed package state, checksum/source metadata, stale-row cleanup, index refresh command, and lifecycle audit reference.
+          after_gate_summary: Skill, lifecycle, and SQL gates show installed state matches disk, deleted packages clean stale rows, and refresh commands preserve auditability.
+
+    - id: phase_08_sprint_03_skill_script_runner
+      phase: phase_8_skill_runtime
+      objective: Connect trusted skill scripts to the subprocess tool runner, approval flow, timeout, and allowlist.
+      functionals:
+        - id: F-SKILLRT-003
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli confirmation --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli patch-pipeline
+          before_gate_summary: Script runner patch states package trust, declared tool, subprocess command, cwd, timeout, side effect, approval requirement, and output evidence routing.
+          after_gate_summary: Tool, operational, confirmation, and patch gates show scripts cannot bypass allowlist, approval, timeout, or evidence gates.
+
+    - id: phase_08_sprint_04_skill_audit_evidence_handoff
+      phase: phase_8_skill_runtime
+      objective: Bind install, update, and script outputs to audit events and evidence rank handoff.
+      functionals:
+        - id: F-SKILLRT-004
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli evidence-rank
+            - .\.venv\Scripts\python -m ai_local.cli request-lifecycle
+            - .\.venv\Scripts\python -m ai_local.cli operational-safety --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli conflict-paths --max-level hard
+          before_gate_summary: Audit handoff patch states event ids, package refs, script output refs, evidence kind, conflict class, and unsafe output routing.
+          after_gate_summary: Evidence, lifecycle, operational, and conflict gates show skill runtime outputs remain data until ranked and unsafe evidence routes to ask, quarantine, or stop.
+
+    - id: phase_08_sprint_05_agent_loop_skill_runtime_close
+      phase: phase_8_skill_runtime
+      objective: Integrate the skill runtime path into the agent loop and close Phase 8 with cross-module gates.
+      functionals:
+        - id: F-SKILLRT-005
+          gate_tests:
+            - .\.venv\Scripts\python -m ai_local.cli agent-loop --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli skills
+            - .\.venv\Scripts\python -m ai_local.cli tool-combo --max-level hard
+            - .\.venv\Scripts\python -m ai_local.cli evidence-rank
+            - .\.venv\Scripts\python -m ai_local.cli global-developer
+            - .\.venv\Scripts\python -m ai_local.cli developer-sprints
+          before_gate_summary: Agent-loop skill runtime patch states selected skill, package state, script result, evidence refs, decision branch, retry or confirmation path, and rollback risk.
+          after_gate_summary: Agent-loop, skill, tool, evidence, and developer gates show runtime skill execution is integrated without bypassing decision, evidence, or rollback boundaries.

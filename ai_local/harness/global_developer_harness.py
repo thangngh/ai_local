@@ -94,8 +94,10 @@ def validate_developer_phase_coverage(
         "phase_4_evaluation",
         "phase_5_knowledge",
         "phase_6_skills",
+        "phase_7_skill_distribution",
+        "phase_8_skill_runtime",
     ]:
-        errors.append("developer phase order must match the main Notion MVP phases")
+        errors.append("developer phase order must match the configured developer phases")
     for requirement in coverage.functional_requirements:
         if requirement.phase not in coverage.phase_ids:
             errors.append(f"{requirement.id} has unknown phase: {requirement.phase}")
