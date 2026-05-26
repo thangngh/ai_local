@@ -165,3 +165,18 @@ def test_skill_script_runner_enforces_tool_timeout(tmp_path: Path) -> None:
     assert result.decision == "timed_out"
     assert result.timeout_seconds == 1
     assert result.next_gate == "patch_pipeline"
+
+
+def test_skill_script_runner_fails_closed_on_sandbox_denial(tmp_path: Path) -> None:
+    runner = SkillScriptRunner(_registry(), workspace_root=tmp_path)
+
+    result = runner.run(
+        SkillScriptRunRequest(
+            script=_script_request(),
+            argv=["print('x') && whoami"],
+        )
+    )
+
+    assert result.decision == "denied"
+    assert result.reason == "sandbox command contains shell metacharacter"
+    assert result.next_gate == "stop"

@@ -10,6 +10,7 @@ class JobStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     DEAD_LETTER = "dead_letter"
+    CANCELLED = "cancelled"
 
 
 class Job(BaseModel):

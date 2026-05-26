@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from ai_local.agent.store import InMemoryAgentRunStore
 from ai_local.audit.store import InMemoryAuditStore, make_audit_event
 from ai_local.confirmation.models import ConfirmationResolution
 from ai_local.evaluator.models import (
@@ -38,6 +37,18 @@ class ContextRetriever(Protocol):
     def retrieve(self, query: str) -> ContextPackage: ...
 
 
+class AgentRunStore(Protocol):
+    def mark_planned(self, run_id: str, plan: list[PlanItem]) -> object: ...
+
+    def mark_waiting_user(self, run_id: str, plan: list[PlanItem]) -> object: ...
+
+    def mark_stopped(self, run_id: str, plan: list[PlanItem]) -> object: ...
+
+    def mark_running(self, run_id: str, *, decision: str, next_state: str) -> object: ...
+
+    def mark_succeeded(self, run_id: str) -> object: ...
+
+
 @dataclass(frozen=True)
 class AgentLoopResult:
     status: str
@@ -65,7 +76,7 @@ class AgentSkillRuntimeResult:
 class AgentLoop:
     def __init__(
         self,
-        run_store: InMemoryAgentRunStore | None = None,
+        run_store: AgentRunStore | None = None,
         context_retriever: ContextRetriever | None = None,
         audit_store: InMemoryAuditStore | None = None,
         skill_runtime: SkillRuntime | None = None,

@@ -25,9 +25,12 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - Queue: lightweight SQLite-backed queue
 - Worker: Python asyncio, process pool when needed
 - Tool runner: subprocess with timeout and allowlist
+- Tool sandbox: adapter boundary for subprocess now, Docker/bubblewrap later
 - Retrieval: ripgrep subprocess, SQLite FTS5, sqlite-vec, tree-sitter
 - Config: YAML plus Pydantic Settings
 - CLI: Typer
+- Runtime control panel: deterministic TUI-ready terminal snapshot
+- Fast phase gate: aggregate Phase 1 through current Phase 10 harness check
 - Testing and quality: pytest, ruff, mypy
 
 ## Documents
@@ -121,6 +124,18 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - [Phase 09 Sprint 03 Progress](docs/phase-09-sprint-03-progress.md)
 - [Phase 09 Sprint 04 Progress](docs/phase-09-sprint-04-progress.md)
 - [Phase 09 Close Report](docs/phase-09-close-report.md)
+- [Phase 10 Sprint 01 Progress](docs/phase-10-sprint-01-progress.md)
+- [Phase 10 Sprint 02 Progress](docs/phase-10-sprint-02-progress.md)
+- [Phase 10 Sprint 03 Progress](docs/phase-10-sprint-03-progress.md)
+- [Phase 10 Sprint 04 Progress](docs/phase-10-sprint-04-progress.md)
+- [Phase 10 Sprint 05 Progress](docs/phase-10-sprint-05-progress.md)
+- [Phase 10 Sprint 06 Progress](docs/phase-10-sprint-06-progress.md)
+- [Phase 10 Close Report](docs/phase-10-close-report.md)
+- [Phase 11 Entry Plan](docs/phase-11-entry-plan.md)
+- [Phase 11 Sprint 01 Progress](docs/phase-11-sprint-01-progress.md)
+- [Phase 11 Sprint 02 Progress](docs/phase-11-sprint-02-progress.md)
+- [Phase 11 Sprint 03 Progress](docs/phase-11-sprint-03-progress.md)
+- [Phase 11 Sprint 04 Progress](docs/phase-11-sprint-04-progress.md)
 
 ## Development Rule
 

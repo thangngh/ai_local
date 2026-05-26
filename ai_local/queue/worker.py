@@ -1,12 +1,22 @@
 from collections.abc import Callable
+from typing import Protocol
 
 from ai_local.audit.store import InMemoryAuditStore, make_audit_event
 from ai_local.agent.loop import AgentLoop
 from ai_local.queue.models import Job
-from ai_local.queue.store import InMemoryQueueStore
 
 
-def claim_one(store: InMemoryQueueStore) -> str | None:
+class QueueStore(Protocol):
+    def claim_next(self) -> Job | None: ...
+
+    def mark_running(self, job: Job) -> Job: ...
+
+    def mark_succeeded(self, job: Job) -> Job: ...
+
+    def mark_failed(self, job: Job, error: str) -> Job: ...
+
+
+def claim_one(store: QueueStore) -> str | None:
     job = store.claim_next()
     return job.id if job else None
 
@@ -17,7 +27,7 @@ JobHandler = Callable[[Job], None]
 class QueueWorker:
     def __init__(
         self,
-        store: InMemoryQueueStore,
+        store: QueueStore,
         handler: JobHandler,
         *,
         audit_store: InMemoryAuditStore | None = None,
@@ -30,13 +40,13 @@ class QueueWorker:
         job = self._store.claim_next()
         if job is None:
             return None
-        self._store.mark_running(job)
+        job = self._store.mark_running(job)
         try:
             self._handler(job)
         except Exception as exc:  # noqa: BLE001
-            self._store.mark_failed(job, str(exc))
+            job = self._store.mark_failed(job, str(exc))
         else:
-            self._store.mark_succeeded(job)
+            job = self._store.mark_succeeded(job)
         if self._audit_store is not None:
             self._audit_store.append(make_audit_event("job.run", job.id, job.status))
         return job

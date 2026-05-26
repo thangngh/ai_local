@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import subprocess
 from pathlib import Path
 
 from ai_local.audit.store import InMemoryAuditStore, make_audit_event
@@ -12,6 +10,12 @@ from ai_local.skills.models import (
 )
 from ai_local.skills.runtime import evaluate_skill_script
 from ai_local.tools.registry import ToolRegistry
+from ai_local.tools.sandbox import (
+    SandboxRunRequest,
+    SubprocessSandboxAdapter,
+    ToolSandboxAdapter,
+    build_tool_sandbox_policy,
+)
 
 
 class SkillScriptRunner:
@@ -21,10 +25,12 @@ class SkillScriptRunner:
         *,
         workspace_root: Path,
         audit_store: InMemoryAuditStore | None = None,
+        sandbox: ToolSandboxAdapter | None = None,
     ) -> None:
         self._tools = tools
         self._workspace_root = workspace_root.resolve()
         self._audit_store = audit_store
+        self._sandbox = sandbox or SubprocessSandboxAdapter()
 
     def run(self, request: SkillScriptRunRequest) -> SkillScriptRunResult:
         policy = evaluate_skill_script(request.script, tools=self._tools)
@@ -73,16 +79,19 @@ class SkillScriptRunner:
 
         timeout_seconds = min(request.timeout_seconds or tool.timeout_seconds, tool.timeout_seconds)
         full_command = [*command, *request.argv]
-        try:
-            completed = subprocess.run(  # noqa: S603
-                full_command,
+        sandbox_result = self._sandbox.run(
+            SandboxRunRequest(
+                command=full_command,
                 cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
+                timeout_seconds=timeout_seconds,
+                policy=build_tool_sandbox_policy(
+                    workspace_root=self._workspace_root,
+                    command=command,
+                    timeout_seconds=tool.timeout_seconds,
+                ),
             )
-        except subprocess.TimeoutExpired as exc:
+        )
+        if sandbox_result.decision == "timed_out":
             result = _run_result(
                 request,
                 "timed_out",
@@ -90,14 +99,28 @@ class SkillScriptRunner:
                 command=full_command,
                 cwd=cwd,
                 timeout_seconds=timeout_seconds,
-                stdout=exc.stdout if isinstance(exc.stdout, str) else "",
-                stderr=exc.stderr if isinstance(exc.stderr, str) else "",
+                stdout=sandbox_result.stdout,
+                stderr=sandbox_result.stderr,
                 next_gate="patch_pipeline",
             )
             self._audit(result)
             return result
+        if sandbox_result.decision == "denied":
+            result = _run_result(
+                request,
+                "denied",
+                sandbox_result.reason,
+                command=full_command,
+                cwd=cwd,
+                timeout_seconds=timeout_seconds,
+                next_gate="stop",
+            )
+            self._audit(result)
+            return result
 
-        decision: SkillScriptRunDecision = "succeeded" if completed.returncode == 0 else "failed"
+        decision: SkillScriptRunDecision = (
+            "succeeded" if sandbox_result.decision == "succeeded" else "failed"
+        )
         reason = (
             "script subprocess succeeded"
             if decision == "succeeded"
@@ -111,9 +134,9 @@ class SkillScriptRunner:
             command=full_command,
             cwd=cwd,
             timeout_seconds=timeout_seconds,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-            return_code=completed.returncode,
+            stdout=sandbox_result.stdout,
+            stderr=sandbox_result.stderr,
+            return_code=sandbox_result.return_code,
             next_gate=next_gate,
         )
         self._audit(result)

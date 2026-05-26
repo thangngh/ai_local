@@ -1,0 +1,94 @@
+phase_fast_gates:
+  source_ref: phase_1_to_phase_11_current
+  gates:
+    - id: phase1_request_lifecycle
+      phase: phase_1_core_loop
+      runner: request_lifecycle
+      max_level: hard
+    - id: phase1_agent_loop
+      phase: phase_1_core_loop
+      runner: agent_loop
+      max_level: hard
+    - id: phase2_retrieval
+      phase: phase_2_retrieval
+      runner: retrieval
+      max_level: hard
+    - id: phase2_memory_sql
+      phase: phase_2_retrieval
+      runner: memory_sql
+      max_level: hard
+    - id: phase3_patch_pipeline
+      phase: phase_3_harness
+      runner: patch_pipeline
+      max_level: hard
+    - id: phase3_conflict_paths
+      phase: phase_3_harness
+      runner: conflict_paths
+      max_level: hard
+    - id: phase4_evaluation
+      phase: phase_4_evaluation
+      runner: evaluation
+      max_level: hard
+    - id: phase4_confirmation
+      phase: phase_4_evaluation
+      runner: confirmation
+      max_level: hard
+    - id: phase5_knowledge
+      phase: phase_5_knowledge
+      runner: knowledge
+      max_level: hard
+    - id: phase5_evidence_rank
+      phase: phase_5_knowledge
+      runner: evidence_rank
+      max_level: hard
+    - id: phase6_tool_combo
+      phase: phase_6_tools
+      runner: tool_combo
+      max_level: hard
+    - id: phase6_prompt_injection
+      phase: phase_6_tools
+      runner: prompt_injection
+      max_level: hard
+    - id: phase7_skills
+      phase: phase_7_skills
+      runner: skills
+      max_level: hard
+    - id: phase7_memory_governance
+      phase: phase_7_skills
+      runner: memory_governance
+      max_level: hard
+    - id: phase8_operational_safety
+      phase: phase_8_runtime
+      runner: operational_safety
+      max_level: hard
+    - id: phase8_thread_control
+      phase: phase_8_runtime
+      runner: thread_control
+      max_level: hard
+    - id: phase9_close
+      phase: phase_9_integrated_pipeline
+      runner: phase9_close
+    - id: phase10_runtime_store
+      phase: phase_10_production_hardening
+      runner: runtime_store_smoke
+    - id: phase10_runtime_schema
+      phase: phase_10_production_hardening
+      runner: runtime_schema_smoke
+    - id: phase10_tool_sandbox
+      phase: phase_10_production_hardening
+      runner: tool_sandbox_smoke
+    - id: phase10_runtime_control_panel
+      phase: phase_10_production_hardening
+      runner: runtime_control_smoke
+    - id: phase11_runtime_tui
+      phase: phase_11_operator_tui
+      runner: runtime_tui_smoke
+    - id: phase11_queue_operations
+      phase: phase_11_operator_tui
+      runner: queue_operations_smoke
+    - id: phase11_agent_run_operations
+      phase: phase_11_operator_tui
+      runner: agent_run_operations_smoke
+    - id: phase11_runtime_backup_restore
+      phase: phase_11_operator_tui
+      runner: runtime_backup_restore_smoke

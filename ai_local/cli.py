@@ -36,22 +36,47 @@ from ai_local.harness.memory_governance_gate import run_memory_governance_promot
 from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
 from ai_local.harness.global_developer_harness import run_global_developer_harness
 from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
+from ai_local.harness.phase_fast_gate import run_phase_fast_gates, write_phase_fast_gate_report
 from ai_local.indexer.project import (
     rebuild_project_index,
     refresh_and_retrieve_project,
     refresh_project_index,
 )
 from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+from ai_local.agent.operations import (
+    cancel_agent_run,
+    list_agent_runs,
+    stop_agent_run,
+)
+from ai_local.agent.store import SQLiteAgentRunStore
+from ai_local.audit.store import SQLiteAuditStore
 from ai_local.pipeline.audit_chain import PipelineAuditChainStore
 from ai_local.pipeline.phase9_close import run_phase9_close
 from ai_local.pipeline.report import Phase9ReportScenario, run_phase9_integration_report
 from ai_local.pipeline.replay import run_phase9_replay_fixtures
 from ai_local.pipeline.stress import run_phase9_stress_cases
+from ai_local.queue.store import SQLiteQueueStore
+from ai_local.queue.operations import (
+    cancel_queue_job,
+    list_queue_jobs,
+    retry_dead_letter_job,
+)
+from ai_local.runtime.control_plane import (
+    build_runtime_control_snapshot,
+    render_runtime_control_snapshot,
+)
+from ai_local.runtime.tui import run_runtime_tui_frames
+from ai_local.runtime.backup import create_runtime_backup, restore_runtime_backup
 from ai_local.skills.store import (
     InstalledSkillStore,
     cleanup_stale_installed_skills,
     rebuild_installed_skill_registry,
     refresh_installed_skill_registry,
+)
+from ai_local.tools.sandbox import (
+    SandboxPolicy,
+    SandboxRunRequest,
+    SubprocessSandboxAdapter,
 )
 
 app = typer.Typer()
@@ -899,6 +924,251 @@ def phase9_close(
     if result.reasons:
         for reason in result.reasons:
             typer.echo(reason)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def runtime_store_stats(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    queue_counts = SQLiteQueueStore(tasks_db).status_counts()
+    run_counts = SQLiteAgentRunStore(tasks_db).status_counts()
+    audit_count = SQLiteAuditStore(audit_db).count()
+    typer.echo(f"RUNTIME_AUDIT events={audit_count}")
+    typer.echo(
+        "RUNTIME_QUEUE "
+        + " ".join(f"{status}={count}" for status, count in sorted(queue_counts.items()))
+    )
+    typer.echo(
+        "RUNTIME_AGENT_RUNS "
+        + " ".join(f"{status}={count}" for status, count in sorted(run_counts.items()))
+    )
+
+
+@app.command()
+def runtime_schema_versions(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    task_versions = {
+        **SQLiteQueueStore(tasks_db).schema_versions(),
+        **SQLiteAgentRunStore(tasks_db).schema_versions(),
+    }
+    audit_versions = SQLiteAuditStore(audit_db).schema_versions()
+    for component, version in sorted({**task_versions, **audit_versions}.items()):
+        typer.echo(f"SCHEMA_VERSION component={component} version={version}")
+
+
+@app.command()
+def tool_sandbox_check(
+    command: list[str] = typer.Argument(...),
+    cwd: Path = typer.Option(Path(".")),
+    workspace_root: Path = typer.Option(Path(".")),
+    timeout_seconds: int = typer.Option(5, min=1),
+    max_timeout_seconds: int = typer.Option(30, min=1),
+    allow_executable: list[str] | None = typer.Option(None),
+) -> None:
+    allowed = frozenset(allow_executable or ([command[0], Path(command[0]).name] if command else []))
+    result = SubprocessSandboxAdapter().run(
+        SandboxRunRequest(
+            command=command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            policy=SandboxPolicy(
+                workspace_root=workspace_root,
+                max_timeout_seconds=max_timeout_seconds,
+                allowed_executables=allowed,
+            ),
+        )
+    )
+    typer.echo(
+        f"SANDBOX decision={result.decision} backend={result.backend} "
+        f"timeout={result.timeout_seconds} reason={result.reason}"
+    )
+    if result.decision == "denied":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def runtime_control_panel(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+    recent_audit_limit: int = typer.Option(5, min=0),
+    fail_on_critical: bool = typer.Option(False),
+) -> None:
+    snapshot = build_runtime_control_snapshot(
+        tasks_db=tasks_db,
+        audit_db=audit_db,
+        recent_audit_limit=recent_audit_limit,
+    )
+    typer.echo(render_runtime_control_snapshot(snapshot))
+    if fail_on_critical and snapshot.health == "critical":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def runtime_tui(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+    iterations: int = typer.Option(1, min=1),
+    refresh_seconds: float = typer.Option(0, min=0),
+    recent_audit_limit: int = typer.Option(5, min=0),
+    fail_on_critical: bool = typer.Option(False),
+) -> None:
+    frames = run_runtime_tui_frames(
+        tasks_db=tasks_db,
+        audit_db=audit_db,
+        iterations=iterations,
+        refresh_seconds=refresh_seconds,
+        recent_audit_limit=recent_audit_limit,
+    )
+    for index, frame in enumerate(frames):
+        if index:
+            typer.echo("")
+        typer.echo(frame.text)
+    if fail_on_critical and any(frame.health == "critical" for frame in frames):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def queue_jobs(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+) -> None:
+    jobs = list_queue_jobs(tasks_db=tasks_db)
+    for job in jobs:
+        typer.echo(
+            f"QUEUE_JOB id={job.id} type={job.type} status={job.status.value} "
+            f"priority={job.priority} attempts={job.attempts}/{job.max_attempts} "
+            f"last_error={job.last_error or ''}"
+        )
+
+
+@app.command()
+def queue_retry(
+    job_id: str = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = retry_dead_letter_job(tasks_db=tasks_db, audit_db=audit_db, job_id=job_id)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    job_status = f" status={result.job.status.value}" if result.job is not None else ""
+    typer.echo(f"{status} queue_retry id={job_id}{job_status} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def queue_cancel(
+    job_id: str = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = cancel_queue_job(tasks_db=tasks_db, audit_db=audit_db, job_id=job_id)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    job_status = f" status={result.job.status.value}" if result.job is not None else ""
+    typer.echo(f"{status} queue_cancel id={job_id}{job_status} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def agent_runs(
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+) -> None:
+    runs = list_agent_runs(tasks_db=tasks_db)
+    for run in runs:
+        typer.echo(
+            f"AGENT_RUN id={run.id} status={run.status.value} "
+            f"decision={run.decision or ''} next_state={run.next_state or ''} "
+            f"goal={run.goal}"
+        )
+
+
+@app.command()
+def agent_run_stop(
+    run_id: str = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = stop_agent_run(tasks_db=tasks_db, audit_db=audit_db, run_id=run_id)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    run_status = f" status={result.run.status.value}" if result.run is not None else ""
+    typer.echo(f"{status} agent_run_stop id={run_id}{run_status} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def agent_run_cancel(
+    run_id: str = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = cancel_agent_run(tasks_db=tasks_db, audit_db=audit_db, run_id=run_id)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    run_status = f" status={result.run.status.value}" if result.run is not None else ""
+    typer.echo(f"{status} agent_run_cancel id={run_id}{run_status} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def runtime_backup(
+    backup_dir: Path = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = create_runtime_backup(tasks_db=tasks_db, audit_db=audit_db, backup_dir=backup_dir)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    manifest = f" manifest={result.manifest_path}" if result.manifest_path is not None else ""
+    typer.echo(f"{status} runtime_backup dir={result.backup_dir}{manifest} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def runtime_restore(
+    backup_dir: Path = typer.Argument(...),
+    tasks_db: Path = typer.Option(Path("tasks.db")),
+    audit_db: Path = typer.Option(Path("audit.db")),
+) -> None:
+    result = restore_runtime_backup(backup_dir=backup_dir, tasks_db=tasks_db, audit_db=audit_db)
+    status = "PASS" if result.decision == "succeeded" else "DENY"
+    manifest = f" manifest={result.manifest_path}" if result.manifest_path is not None else ""
+    typer.echo(f"{status} runtime_restore dir={result.backup_dir}{manifest} reason={result.reason}")
+    if result.decision != "succeeded":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def phase_fast_gate(
+    config: Path = typer.Option(Path("configs/phase_fast_gates.yaml")),
+    root: Path = typer.Option(Path(".")),
+    workspace_root: Path = typer.Option(Path(".reports/phase-fast-gate")),
+    output: Path | None = typer.Option(None),
+) -> None:
+    summary = run_phase_fast_gates(
+        config_path=config,
+        root=root,
+        workspace_root=workspace_root,
+    )
+    if output is not None:
+        write_phase_fast_gate_report(summary, output)
+    status = "PASS" if summary.passed else "FAIL"
+    typer.echo(
+        f"{status} phase_fast_gate source={summary.source_ref} "
+        f"passed={summary.passed_count}/{summary.total}"
+    )
+    if output is not None:
+        typer.echo(f"REPORT {output}")
+    for result in summary.results:
+        item_status = "PASS" if result.passed else "FAIL"
+        typer.echo(
+            f"{item_status} {result.phase}.{result.id} "
+            f"runner={result.runner} {result.summary}"
+        )
+    if not summary.passed:
         raise typer.Exit(code=1)
 
 
