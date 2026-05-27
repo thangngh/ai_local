@@ -36,6 +36,13 @@ from ai_local.harness.memory_governance_gate import run_memory_governance_promot
 from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
 from ai_local.harness.global_developer_harness import run_global_developer_harness
 from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
+from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig
+from ai_local.benchmark.runner import (
+    load_ollama_benchmark_config,
+    run_golden_benchmark,
+    write_benchmark_report,
+)
+from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
 from ai_local.harness.phase_fast_gate import run_phase_fast_gates, write_phase_fast_gate_report
 from ai_local.indexer.project import (
     rebuild_project_index,
@@ -1139,6 +1146,101 @@ def runtime_restore(
     typer.echo(f"{status} runtime_restore dir={result.backup_dir}{manifest} reason={result.reason}")
     if result.decision != "succeeded":
         raise typer.Exit(code=1)
+
+
+@app.command("benchmark-run")
+def benchmark_run(
+    tasks_root: Path = typer.Option(Path("golden_tasks")),
+    benchmark_id: str = typer.Option("local_ai_bench"),
+    run_id: str | None = typer.Option(None),
+    output: Path = typer.Option(Path(".reports/benchmark/latest.json")),
+    with_ollama: bool = typer.Option(False, "--with-ollama"),
+    ollama_model: str = typer.Option("qwen2.5:0.5b", "--ollama-model"),
+    ollama_base_url: str = typer.Option("http://127.0.0.1:11434", "--ollama-base-url"),
+    ollama_config: Path = typer.Option(Path("configs/benchmark_ollama.yaml")),
+    harness_weight: float | None = typer.Option(None, min=0.0, max=1.0),
+) -> None:
+    ollama_settings = None
+    if with_ollama:
+        base_settings = load_ollama_benchmark_config(ollama_config)
+        ollama_settings = OllamaBenchmarkConfig(
+            base_url=ollama_base_url,
+            model=ollama_model,
+            timeout_seconds=base_settings.timeout_seconds,
+            harness_weight=harness_weight if harness_weight is not None else base_settings.harness_weight,
+        )
+    try:
+        report = run_golden_benchmark(
+            tasks_root=tasks_root,
+            benchmark_id=benchmark_id,
+            run_id=run_id,
+            ollama_config=ollama_settings,
+        )
+    except OllamaError as exc:
+        typer.echo(f"FAIL ollama {exc}")
+        raise typer.Exit(code=1) from exc
+    written = write_benchmark_report(report, output)
+    status = "PASS" if report.aggregate.fail_count == 0 else "FAIL"
+    mode = report.run_mode
+    model_suffix = f" model={report.ollama_model}" if report.ollama_model else ""
+    typer.echo(
+        f"{status} benchmark_run id={report.benchmark_id} run={report.run_id} mode={mode}{model_suffix} "
+        f"score={report.aggregate.system_score} tier={report.aggregate.tier} "
+        f"passed={report.aggregate.pass_count}/{report.aggregate.total}"
+    )
+    if report.cost.total_tokens > 0:
+        typer.echo(
+            "COST "
+            f"input_tokens={report.cost.total_input_tokens} "
+            f"output_tokens={report.cost.total_output_tokens} "
+            f"total_tokens={report.cost.total_tokens} "
+            f"latency_ms={report.cost.total_latency_ms} "
+            f"output_tps={report.cost.output_tokens_per_second} "
+            f"usd={report.cost.estimated_cost_usd}"
+        )
+    typer.echo(f"REPORT {written}")
+    for task in report.tasks:
+        item_status = task.result.upper()
+        token_suffix = ""
+        if task.token_usage is not None:
+            token_suffix = (
+                f" in={task.token_usage.input_tokens} out={task.token_usage.output_tokens} "
+                f"usd={task.token_usage.estimated_cost_usd}"
+            )
+        typer.echo(
+            f"{item_status} {task.task_id} category={task.category} "
+            f"system_score={task.system_score} failures={len(task.failures)}{token_suffix}"
+        )
+    if report.aggregate.fail_count > 0:
+        raise typer.Exit(code=1)
+
+
+@app.command("benchmark-ollama-check")
+def benchmark_ollama_check(
+    ollama_model: str = typer.Option("qwen2.5:0.5b", "--ollama-model"),
+    ollama_base_url: str = typer.Option("http://127.0.0.1:11434", "--ollama-base-url"),
+) -> None:
+    client = OllamaClient(OllamaConfig(base_url=ollama_base_url, model=ollama_model))
+    if not client.health_check():
+        typer.echo(f"FAIL ollama_unreachable base_url={ollama_base_url}")
+        raise typer.Exit(code=1)
+    models = client.list_models()
+    typer.echo(f"PASS ollama_reachable models={len(models)}")
+    for name in models:
+        typer.echo(f"MODEL {name}")
+    try:
+        client.ensure_model(ollama_model)
+    except OllamaError as exc:
+        typer.echo(f"FAIL {exc}")
+        raise typer.Exit(code=1) from exc
+    probe = client.chat(system="Reply with DECISION: continue", user="health check")
+    typer.echo(
+        f"PASS ollama_model model={ollama_model} latency_ms={probe.latency_ms} "
+        f"input_tokens={probe.token_usage.input_tokens} "
+        f"output_tokens={probe.token_usage.output_tokens} "
+        f"source={probe.token_usage.token_source} "
+        f"preview={probe.content[:80]!r}"
+    )
 
 
 @app.command()

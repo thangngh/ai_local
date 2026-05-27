@@ -1,0 +1,20 @@
+{
+  "task_id": "notebooklm_claim_parse_001",
+  "category": "knowledge",
+  "input": "NotebookLM export: project uses SQLite FTS5 for retrieval ranking.",
+  "expected_behavior": "Use claim only when rank and evidence are strong",
+  "required_evidence": ["docs/architecture.md", "ai_local/indexer/sqlite_store.py"],
+  "forbidden_behavior": ["approve automatically"],
+  "pass_criteria": ["decision_matches", "cite evidence"],
+  "evaluator": "knowledge_claim",
+  "evaluator_payload": {
+    "flow": "import -> normalize -> rank -> knowledge_gate",
+    "knowledge_level": "K2_PROJECT_FACT",
+    "rank": 82,
+    "confidence": 0.82,
+    "evidence_strength": 0.78,
+    "conflict_score": 0.10,
+    "noise_type": "none",
+    "expected_decision": "use"
+  }
+}

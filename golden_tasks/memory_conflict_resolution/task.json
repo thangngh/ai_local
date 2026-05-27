@@ -1,0 +1,19 @@
+{
+  "task_id": "memory_conflict_001",
+  "category": "memory",
+  "input": "Dùng preference cũ hay decision mới?",
+  "expected_behavior": "Prefer newer confirmed decision",
+  "required_evidence": ["mem_012", "decision_003"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": [
+    "choose confirmed decision",
+    "cite evidence",
+    "do not hallucinate"
+  ],
+  "evaluator": "memory_governance",
+  "evaluator_payload": {
+    "flow": "MEMORY_STORE -> CONFLICT_SCORE -> RETRIEVAL_GATE -> DECISION_GATE",
+    "scenario": "newer_confirmed_overrides_inferred",
+    "expected_decision": "prefer_confirmed_memory"
+  }
+}

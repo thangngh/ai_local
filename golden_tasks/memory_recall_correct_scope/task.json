@@ -1,0 +1,22 @@
+{
+  "task_id": "memory_recall_correct_scope_001",
+  "category": "memory",
+  "input": "Inject confirmed project convention with evidence",
+  "expected_behavior": "Inject memory when scope and evidence match",
+  "required_evidence": ["mem_conv_001"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "cite evidence"],
+  "evaluator": "memory_policy",
+  "evaluator_payload": {
+    "mode": "retrieval",
+    "claim": "Use pytest harness before promotion",
+    "scope": "project",
+    "memory_level": "M2_PROJECT_CONVENTION",
+    "requested_scope": "project",
+    "evidence_refs": ["docs/development.md"],
+    "confirmed": true,
+    "fresh": true,
+    "retrieval_score": 0.85,
+    "expected_decision": "inject_memory"
+  }
+}

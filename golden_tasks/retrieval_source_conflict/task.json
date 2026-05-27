@@ -1,0 +1,16 @@
+{
+  "task_id": "retrieval_source_conflict_001",
+  "category": "retrieval",
+  "input": "schema migration allowed without confirmation",
+  "expected_behavior": "Preserve conflicting sources and ask user",
+  "required_evidence": ["docs/architecture.md", "configs/patch_levels.yaml"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "detect conflict"],
+  "evaluator": "retrieval",
+  "evaluator_payload": {
+    "query": "schema migration allowed without confirmation",
+    "noise_type": "source_conflict",
+    "expected_action": "preserve_conflict",
+    "expected_decision": "ask_user"
+  }
+}

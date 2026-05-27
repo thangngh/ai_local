@@ -42,6 +42,7 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - [Tools](docs/tools.md)
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
+- [Golden Task Benchmark](docs/benchmark.md)
 - [Noise Harness](docs/noise-harness.md)
 - [Memory Regression Harness](docs/memory-regression-harness.md)
 - [Memory Layer Harness](docs/memory-layer-harness.md)

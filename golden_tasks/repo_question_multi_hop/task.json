@@ -1,0 +1,17 @@
+{
+  "task_id": "repo_question_multi_hop_001",
+  "category": "retrieval",
+  "input": "task -> docs -> memory -> retrieval -> evidence -> risk -> decision",
+  "expected_behavior": "Deep chain requires evidence review",
+  "required_evidence": ["docs/architecture.md"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "detect conflict"],
+  "evaluator": "retrieval",
+  "evaluator_payload": {
+    "query": "task -> docs -> memory -> retrieval -> evidence -> risk -> decision",
+    "noise_type": "deep_chain_interference",
+    "expected_action": "require_evidence_and_security_gate",
+    "expected_decision": "ask_user",
+    "hop_depth": 18
+  }
+}

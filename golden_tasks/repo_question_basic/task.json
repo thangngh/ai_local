@@ -1,0 +1,16 @@
+{
+  "task_id": "repo_question_basic_001",
+  "category": "retrieval",
+  "input": "Where is the queue worker lease logic implemented?",
+  "expected_behavior": "Normalize query and continue retrieval",
+  "required_evidence": ["ai_local/queue/worker.py"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "cite evidence", "do not hallucinate"],
+  "evaluator": "retrieval",
+  "evaluator_payload": {
+    "query": "queue worker lease logic",
+    "noise_type": "bilingual_mixed",
+    "expected_action": "normalize_and_search",
+    "expected_decision": "continue"
+  }
+}

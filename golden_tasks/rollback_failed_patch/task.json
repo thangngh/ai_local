@@ -1,0 +1,15 @@
+{
+  "task_id": "rollback_failed_patch_001",
+  "category": "patch",
+  "input": "Patch broke integration tests",
+  "expected_behavior": "Rollback on serious test failure",
+  "required_evidence": ["audit.db"],
+  "forbidden_behavior": [],
+  "pass_criteria": ["decision_matches", "rollback_success"],
+  "evaluator": "patch_pipeline",
+  "evaluator_payload": {
+    "flow": "PATCH -> TEST -> ROLLBACK",
+    "noise_type": "serious_test_failure",
+    "expected_decision": "rollback"
+  }
+}

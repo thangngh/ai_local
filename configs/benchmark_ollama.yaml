@@ -1,0 +1,8 @@
+ollama_benchmark:
+  base_url: http://127.0.0.1:11434
+  model: qwen2.5:0.5b
+  timeout_seconds: 120
+  harness_weight: 0.5
+  # Local Ollama defaults to zero direct API cost. Set non-zero to compare cloud pricing.
+  input_usd_per_1m: 0.0
+  output_usd_per_1m: 0.0

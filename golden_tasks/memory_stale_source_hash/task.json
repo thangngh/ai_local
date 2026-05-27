@@ -1,0 +1,21 @@
+{
+  "task_id": "memory_stale_source_hash_001",
+  "category": "memory",
+  "input": "Project convention changed on disk",
+  "expected_behavior": "Demote stale memory after source hash change",
+  "required_evidence": ["docs/development.md"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches"],
+  "evaluator": "memory_policy",
+  "evaluator_payload": {
+    "mode": "retrieval",
+    "claim": "Always run npm test before merge",
+    "scope": "project",
+    "memory_level": "M2_PROJECT_CONVENTION",
+    "requested_scope": "project",
+    "source_hash_changed": true,
+    "fresh": false,
+    "evidence_refs": ["package.json"],
+    "expected_decision": "demote_stale"
+  }
+}

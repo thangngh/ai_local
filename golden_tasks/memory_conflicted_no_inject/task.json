@@ -1,0 +1,15 @@
+{
+  "task_id": "memory_conflicted_no_inject_001",
+  "category": "memory",
+  "input": "Two conflicting preferences for patch size",
+  "expected_behavior": "Do not inject conflicted memory",
+  "required_evidence": ["mem_a", "mem_b"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "detect conflict"],
+  "evaluator": "memory_governance",
+  "evaluator_payload": {
+    "flow": "MEMORY_STORE -> CONFLICT_SCORE -> RETRIEVAL_GATE -> DECISION_GATE",
+    "scenario": "conflicted_memory",
+    "expected_decision": "do_not_use"
+  }
+}

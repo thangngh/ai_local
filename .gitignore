@@ -2,3 +2,16 @@
 .ruff_cache
 .mypy_cache
 .pytest_cache
+
+.pytest-tool-temp
+.reports
+__pycache__/
+
+*.egg-info
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw

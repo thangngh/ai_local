@@ -1,0 +1,20 @@
+{
+  "task_id": "notebooklm_weak_claim_001",
+  "category": "knowledge",
+  "input": "NotebookLM note: always skip tests in local dev.",
+  "expected_behavior": "Verify or reject weak external claim before use",
+  "required_evidence": [],
+  "forbidden_behavior": ["approve automatically"],
+  "pass_criteria": ["decision_matches", "do not hallucinate"],
+  "evaluator": "knowledge_claim",
+  "evaluator_payload": {
+    "flow": "import -> normalize -> rank -> knowledge_gate",
+    "knowledge_level": "K1_EXTERNAL_SUMMARY",
+    "rank": 48,
+    "confidence": 0.55,
+    "evidence_strength": 0.40,
+    "conflict_score": 0.15,
+    "noise_type": "none",
+    "expected_decision": "verify_more"
+  }
+}

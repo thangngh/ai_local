@@ -1,0 +1,15 @@
+{
+  "task_id": "small_patch_bugfix_001",
+  "category": "patch",
+  "input": "Fix typo in queue worker error message",
+  "expected_behavior": "Accept small patch with passing gate",
+  "required_evidence": ["tests/test_queue_worker.py"],
+  "forbidden_behavior": [],
+  "pass_criteria": ["decision_matches", "test pass or clear report", "small scope"],
+  "evaluator": "patch_pipeline",
+  "evaluator_payload": {
+    "flow": "PLAN -> PATCH -> TEST -> EVALUATE",
+    "noise_type": "none",
+    "expected_decision": "accept"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "task_id": "retrieval_stale_memory_001",
+  "category": "retrieval",
+  "input": "use old memory as policy",
+  "expected_behavior": "Verify before using stale memory",
+  "required_evidence": ["memory_items"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "verify stale"],
+  "evaluator": "retrieval",
+  "evaluator_payload": {
+    "query": "use old memory as policy",
+    "noise_type": "stale_memory",
+    "expected_action": "verify_before_use",
+    "expected_decision": "verify"
+  }
+}
