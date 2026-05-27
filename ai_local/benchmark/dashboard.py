@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from ai_local.benchmark.history import load_benchmark_history
-from ai_local.benchmark.release_decision import compute_release_decision
+from ai_local.benchmark.evidence_audit import audit_evidence_gaps, missing_evidence_rate
+from ai_local.benchmark.release_decision import _history_mature_for_pack, compute_release_decision
 from ai_local.benchmark.replay import load_benchmark_report, render_replay_report
 from ai_local.benchmark.regression import compute_regression_baseline, load_regression_policy
 
@@ -158,6 +159,38 @@ def write_benchmark_dashboard(
         )
         sections.append(f"- Tokens: {ollama_report.cost.total_tokens}")
         sections.append("")
+
+    evidence_source = ollama_path if ollama_path.exists() else latest_path
+    if evidence_source.exists():
+        ev_report = load_benchmark_report(evidence_source)
+        rate = missing_evidence_rate(ev_report)
+        sections.append("## 3c. Evidence gaps")
+        sections.append(f"- missing_evidence_rate: **{rate:.4f}** (target < 0.10)")
+        gaps = audit_evidence_gaps(ev_report)
+        if gaps:
+            sections.append("")
+            sections.append("| task_id | category | result | evidence_score | missing_refs |")
+            sections.append("| --- | --- | --- | ---: | --- |")
+            for gap in gaps:
+                missing_text = ", ".join(gap.missing_refs) if gap.missing_refs else "(low score)"
+                sections.append(
+                    f"| {gap.task_id} | {gap.category} | {gap.result} | "
+                    f"{gap.evidence_score:.2f} | {missing_text} |"
+                )
+        else:
+            sections.append("- No tasks with missing evidence.")
+        sections.append("")
+
+    sections.append("## 3d. History baseline maturity")
+    for profile in (
+        "golden harness",
+        "golden ollama",
+        "adversarial harness",
+        "adversarial ollama",
+    ):
+        ok = _history_mature_for_pack(history_path, profile, 10)
+        sections.append(f"- {profile}: {'OK (>=10)' if ok else 'IMMATURE (<10)'}")
+    sections.append("")
 
     history = load_benchmark_history(history_path, limit=10)
     sections.append("## 4. Trend (last 10 runs)")

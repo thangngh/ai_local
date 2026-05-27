@@ -142,24 +142,41 @@ def _retrieval_metrics(results: list[BenchmarkTaskResult]) -> RetrievalBenchmark
             recall_at_k=1.0,
             mrr=1.0,
             context_noise_rate=0.0,
-            missing_evidence_rate=0.0,
+            missing_evidence_rate=_missing_evidence_rate_all_tasks(results),
         )
 
     precision = sum(result.scores.retrieval_score for result in retrieval_results) / len(retrieval_results)
     recall = sum(result.scores.task_success for result in retrieval_results) / len(retrieval_results)
     mrr = sum(_reciprocal_rank(result) for result in retrieval_results) / len(retrieval_results)
     noise = sum(1 for result in retrieval_results if result.scores.retrieval_score < 1.0) / len(retrieval_results)
-    missing_evidence = sum(
-        1 for result in retrieval_results if result.scores.evidence_score < 0.9
-    ) / len(retrieval_results)
+    missing_evidence = _missing_evidence_rate_all_tasks(results)
 
     return RetrievalBenchmarkMetrics(
         precision_at_k=round(precision, 4),
         recall_at_k=round(recall, 4),
         mrr=round(mrr, 4),
         context_noise_rate=round(noise, 4),
-        missing_evidence_rate=round(missing_evidence, 4),
+        missing_evidence_rate=missing_evidence,
     )
+
+
+def _missing_evidence_rate_all_tasks(results: list[BenchmarkTaskResult]) -> float:
+    if not results:
+        return 0.0
+    gap_count = sum(1 for result in results if _task_has_evidence_gap(result))
+    return round(gap_count / len(results), 4)
+
+
+def _task_has_evidence_gap(result: BenchmarkTaskResult) -> bool:
+    missing = result.debug_trace.get("missing_required_evidence")
+    if isinstance(missing, list) and len(missing) > 0:
+        return True
+    if result.category in {"retrieval", "live_retrieval"} and result.scores.evidence_score < 0.9:
+        return True
+    required = result.debug_trace.get("required_evidence")
+    if isinstance(required, list) and required and not result.retrieved_refs:
+        return True
+    return False
 
 
 def _patch_metrics(results: list[BenchmarkTaskResult]) -> PatchBenchmarkMetrics:

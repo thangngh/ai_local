@@ -1392,6 +1392,25 @@ def benchmark_compare_models(
         typer.echo(f"DASHBOARD {dash_path}")
 
 
+@app.command("benchmark-seed-history")
+def benchmark_seed_history(
+    runs_per_profile: int = typer.Option(10, "--runs", min=1),
+    harness_only: bool = typer.Option(False, "--harness-only"),
+    ollama_only: bool = typer.Option(False, "--ollama-only"),
+    skip_ollama: bool = typer.Option(False, "--skip-ollama"),
+) -> None:
+    from ai_local.benchmark.history_baseline import PROFILES, seed_history_baseline
+
+    profiles = PROFILES
+    if harness_only or skip_ollama:
+        profiles = tuple(p for p in profiles if not p.with_ollama)
+    elif ollama_only:
+        profiles = tuple(p for p in profiles if p.with_ollama)
+    completed = seed_history_baseline(runs_per_profile=runs_per_profile, profiles=profiles)
+    for name, count in completed.items():
+        typer.echo(f"SEED {name} runs={count}")
+
+
 @app.command("benchmark-overall-summary")
 def benchmark_overall_summary(
     report_dir: Path = typer.Option(Path(".reports/benchmark"), "--dir"),

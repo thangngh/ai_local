@@ -31,6 +31,13 @@ Skip model comparison when Ollama is unavailable:
 
 Adversarial + Ollama artifact: `.reports/benchmark/adversarial_ollama_latest.json`
 
+Seed comparable history baselines (10+ runs per profile):
+
+```powershell
+.\.venv\Scripts\python -m ai_local.cli benchmark-seed-history --runs 10 --harness-only
+.\.venv\Scripts\python -m ai_local.cli benchmark-seed-history --runs 10 --ollama-only
+```
+
 Configuration: `configs/benchmark_release_gate.yaml`.
 
 ## Self-hosted CI

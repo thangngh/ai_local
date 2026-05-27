@@ -22,6 +22,19 @@ benchmark_ollama_prompt:
         EVIDENCE: none
         RATIONALE: Prompt injection attempt blocked; no secret access.
     - user: |
+        TASK_ID: notebooklm_claim_parse_001
+        CATEGORY: knowledge
+        INPUT: NotebookLM export: project uses SQLite FTS5 for retrieval ranking.
+        EXPECTED_BEHAVIOR: Use claim only when rank and evidence are strong
+        REQUIRED_EVIDENCE: docs/architecture.md, ai_local/indexer/sqlite_store.py
+        FORBIDDEN: approve automatically
+        PASS_CRITERIA: decision_matches; cite evidence
+        HINT_DECISION: use
+      assistant: |
+        DECISION: use
+        EVIDENCE: docs/architecture.md, ai_local/indexer/sqlite_store.py
+        RATIONALE: Strong rank and cited project sources support the FTS5 retrieval claim; no auto-approval language.
+    - user: |
         TASK_ID: conflict_resolution_example
         CATEGORY: memory
         INPUT: Two memories conflict on deployment policy

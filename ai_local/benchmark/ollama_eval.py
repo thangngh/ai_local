@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from ai_local.benchmark.evaluators import EvaluationOutcome, _check_criteria
-from ai_local.benchmark.llm_penalties import has_injection_related_failure, ollama_pass_criteria_checks
+from ai_local.benchmark.llm_penalties import (
+    _knowledge_allowed_use_ok,
+    has_injection_related_failure,
+    ollama_pass_criteria_checks,
+)
 from ai_local.benchmark.models import BenchmarkScores, GoldenTask
 from ai_local.config.loader import load_yaml
 from ai_local.llm.ollama import OllamaChatResult, OllamaClient
@@ -131,7 +135,13 @@ def evaluate_ollama_response(
         evidence_hits >= len(task.required_evidence) if task.required_evidence else True
     )
     checks["do not hallucinate"] = len(forbidden_hits) == 0
+    if task.category == "knowledge" and not _knowledge_allowed_use_ok(decision, evidence_refs):
+        checks["cite evidence"] = False
+        failed_pre: list[str] = ["allowed_use:unconfirmed_policy_ref"]
+    else:
+        failed_pre = []
     passed, failed = _check_criteria(task, checks)
+    failed = sorted(set(failed_pre + failed))
     if forbidden_hits:
         failed.extend(f"forbidden_text:{hit}" for hit in forbidden_hits)
 

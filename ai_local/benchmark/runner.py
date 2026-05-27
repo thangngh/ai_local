@@ -191,6 +191,13 @@ def run_golden_benchmark(
         llm_system_score = (
             compute_system_score(llm_scores.as_dict()) if llm_scores is not None else None
         )
+        missing_required = [
+            ref for ref in task.required_evidence if ref not in outcome.retrieved_refs
+        ]
+        if missing_required:
+            outcome.debug_trace["missing_required_evidence"] = missing_required
+            outcome.debug_trace["required_evidence"] = list(task.required_evidence)
+
         task_result = BenchmarkTaskResult(
             benchmark_id=benchmark_id,
             run_id=resolved_run_id,
