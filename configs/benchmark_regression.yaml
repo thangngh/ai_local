@@ -1,0 +1,11 @@
+regression:
+  baseline_strategy: median
+  baseline_last_n: 5
+  min_baseline_entries: 2
+  max_drop_blended_score: 0.04
+  max_drop_harness_score: 0.04
+  max_drop_llm_score: 0.05
+  max_drop_active_memory_with_evidence: 0.05
+  max_drop_retrieval_mrr: 0.08
+  max_drop_parse_rate: 0.10
+  max_drop_pass_count: 1

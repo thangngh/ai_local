@@ -59,6 +59,8 @@ jobs:
             --enforce-thresholds \
             --skip-history
 
+  # Full release gate (Ollama + adversarial + compare): workflow benchmark-release-gate.yml on self-hosted runner.
+
   benchmark-ollama:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

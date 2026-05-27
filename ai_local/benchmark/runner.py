@@ -29,15 +29,29 @@ from ai_local.config.loader import load_yaml
 from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
 
 
-def discover_golden_tasks(tasks_root: Path) -> list[GoldenTask]:
+def discover_benchmark_tasks(tasks_root: Path, *, include_adversarial: bool = False) -> list[GoldenTask]:
     tasks: list[GoldenTask] = []
-    for task_file in sorted(tasks_root.glob("**/task.json")):
+    for task_file in sorted(tasks_root.glob("*/task.json")):
         payload = json.loads(task_file.read_text(encoding="utf-8"))
         tasks.append(GoldenTask.model_validate(payload))
+    if include_adversarial:
+        adversarial_root = tasks_root / "adversarial"
+        if adversarial_root.is_dir():
+            for task_file in sorted(adversarial_root.glob("**/task.json")):
+                payload = json.loads(task_file.read_text(encoding="utf-8"))
+                tasks.append(GoldenTask.model_validate(payload))
     if not tasks:
-        msg = f"No golden tasks found under {tasks_root}"
+        msg = f"No benchmark tasks found under {tasks_root}"
         raise FileNotFoundError(msg)
     return tasks
+
+
+def discover_golden_tasks(tasks_root: Path) -> list[GoldenTask]:
+    return discover_benchmark_tasks(tasks_root, include_adversarial=False)
+
+
+def benchmark_task_pack(*, include_adversarial: bool) -> str:
+    return "golden+adversarial" if include_adversarial else "golden"
 
 
 def _result_label(scores: BenchmarkScores, failures: list[str]) -> BenchmarkResultLabel:
@@ -71,8 +85,9 @@ def run_golden_benchmark(
     run_id: str | None = None,
     ollama_config: OllamaBenchmarkConfig | None = None,
     ollama_prompt_config: OllamaPromptConfig | None = None,
+    include_adversarial: bool = False,
 ) -> BenchmarkRunReport:
-    tasks = discover_golden_tasks(tasks_root)
+    tasks = discover_benchmark_tasks(tasks_root, include_adversarial=include_adversarial)
     resolved_run_id = run_id or f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
     results: list[BenchmarkTaskResult] = []
     ollama_client: OllamaClient | None = None
@@ -186,6 +201,7 @@ def write_benchmark_report(
     *,
     write_summary: bool = True,
     append_history: bool = True,
+    task_pack: str = "golden",
 ) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = report.model_dump(mode="json")
@@ -197,6 +213,6 @@ def write_benchmark_report(
     if write_summary:
         write_summary_markdown(report, output.parent / f"{report.run_id}_summary.md")
     if append_history:
-        append_benchmark_history(report, output.parent / "history.jsonl")
+        append_benchmark_history(report, output.parent / "history.jsonl", task_pack=task_pack)
     write_split_score_reports(report, output.parent)
     return output

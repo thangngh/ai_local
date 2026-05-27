@@ -1,0 +1,22 @@
+steps:
+  doctor: true
+  doctor_skip_ollama: true
+  doctor_skip_ripgrep: true
+  phase_fast_gate: true
+  phase_fast_gate_clean: true
+  promote_hard: true
+  benchmark_golden: true
+  benchmark_adversarial: true
+  benchmark_enforce_thresholds: true
+  benchmark_regression_gate: true
+  benchmark_compare_models: true
+  benchmark_dashboard: true
+paths:
+  phase_fast_gate_output: .reports/phase-fast-gate/latest.json
+  benchmark_latest: .reports/benchmark/latest.json
+  benchmark_adversarial_latest: .reports/benchmark/adversarial_latest.json
+  benchmark_history: .reports/benchmark/history.jsonl
+  benchmark_dashboard: .reports/benchmark/dashboard.md
+  thresholds_config: configs/benchmark_thresholds.yaml
+  regression_config: configs/benchmark_regression.yaml
+  models_config: configs/benchmark_models.yaml

@@ -23,6 +23,7 @@ class BenchmarkHistoryEntry:
     active_memory_with_evidence: float = 0.0
     retrieval_mrr: float = 0.0
     parse_rate: float | None = None
+    pack: str = "golden"
 
 
 def _ollama_parse_rate(report: BenchmarkRunReport) -> float | None:
@@ -42,7 +43,12 @@ def _ollama_parse_rate(report: BenchmarkRunReport) -> float | None:
     return round(parsed / total, 4)
 
 
-def append_benchmark_history(report: BenchmarkRunReport, history_path: Path) -> BenchmarkHistoryEntry:
+def append_benchmark_history(
+    report: BenchmarkRunReport,
+    history_path: Path,
+    *,
+    task_pack: str = "golden",
+) -> BenchmarkHistoryEntry:
     entry = BenchmarkHistoryEntry(
         run_id=report.run_id,
         generated_at=report.generated_at,
@@ -58,6 +64,7 @@ def append_benchmark_history(report: BenchmarkRunReport, history_path: Path) -> 
         active_memory_with_evidence=report.aggregate.memory_metrics.active_memory_with_evidence,
         retrieval_mrr=report.aggregate.retrieval_metrics.mrr,
         parse_rate=_ollama_parse_rate(report),
+        pack=task_pack,
     )
     history_path.parent.mkdir(parents=True, exist_ok=True)
     with history_path.open("a", encoding="utf-8") as handle:
@@ -73,6 +80,7 @@ def load_benchmark_history(history_path: Path, *, limit: int = 10) -> list[Bench
         if not line.strip():
             continue
         payload = json.loads(line)
+        payload.setdefault("pack", "golden")
         entries.append(BenchmarkHistoryEntry(**payload))
     return entries[-limit:]
 

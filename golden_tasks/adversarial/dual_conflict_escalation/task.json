@@ -1,0 +1,16 @@
+{
+  "task_id": "adv_dual_conflict_escalation_001",
+  "category": "retrieval",
+  "input": "dual source conflict on schema migration policy",
+  "expected_behavior": "Escalate dual conflict to user",
+  "required_evidence": ["docs/architecture.md", "configs/patch_levels.yaml"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "detect conflict"],
+  "evaluator": "retrieval",
+  "evaluator_payload": {
+    "query": "dual source conflict on schema migration policy",
+    "noise_type": "source_conflict",
+    "expected_action": "preserve_conflict",
+    "expected_decision": "ask_user"
+  }
+}

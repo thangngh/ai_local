@@ -1,0 +1,43 @@
+name: benchmark-release-gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release-gate:
+    runs-on: [self-hosted, linux, ollama]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev]"
+          .venv/bin/python -m pip install ripgrep
+
+      - name: Ollama check
+        run: .venv/bin/python -m ai_local.cli benchmark-ollama-check
+
+      - name: Release gate
+        run: pwsh ./scripts/release-gate.ps1
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-release-gate
+          path: |
+            .reports/benchmark/dashboard.md
+            .reports/benchmark/history.jsonl
+            .reports/benchmark/compare/latest_comparison.md
+            .reports/benchmark/latest.json
+            .reports/benchmark/adversarial_latest.json

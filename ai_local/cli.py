@@ -40,7 +40,11 @@ from ai_local.doctor import run_doctor
 from ai_local.benchmark.history import load_benchmark_history, render_trend_table
 from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig, load_ollama_prompt_config
 from ai_local.benchmark.replay import load_benchmark_report, render_replay_report
+from ai_local.benchmark.dashboard import write_benchmark_dashboard
+from ai_local.benchmark.overall_summary import write_overall_summary
+from ai_local.benchmark.regression import enforce_regression_gate, load_regression_policy
 from ai_local.benchmark.runner import (
+    benchmark_task_pack,
     load_ollama_benchmark_config,
     run_golden_benchmark,
     write_benchmark_report,
@@ -1159,6 +1163,7 @@ def benchmark_run(
     benchmark_id: str = typer.Option("local_ai_bench"),
     run_id: str | None = typer.Option(None),
     output: Path = typer.Option(Path(".reports/benchmark/latest.json")),
+    with_adversarial: bool = typer.Option(False, "--with-adversarial"),
     with_ollama: bool = typer.Option(False, "--with-ollama"),
     ollama_model: str = typer.Option("qwen2.5:0.5b", "--ollama-model"),
     ollama_base_url: str = typer.Option("http://127.0.0.1:11434", "--ollama-base-url"),
@@ -1166,13 +1171,23 @@ def benchmark_run(
     ollama_prompt_config: Path = typer.Option(Path("configs/benchmark_ollama_prompt.yaml")),
     harness_weight: float | None = typer.Option(None, min=0.0, max=1.0),
     enforce_thresholds_flag: bool = typer.Option(False, "--enforce-thresholds"),
+    enforce_history: bool = typer.Option(False, "--enforce-history"),
+    regression_config: Path = typer.Option(Path("configs/benchmark_regression.yaml")),
     thresholds_config: Path = typer.Option(Path("configs/benchmark_thresholds.yaml")),
     skip_history: bool = typer.Option(False, "--skip-history"),
+    skip_dashboard: bool = typer.Option(False, "--skip-dashboard"),
     full_suite: bool = typer.Option(False, "--full-suite", help="Run harness+ollama with thresholds and history"),
 ) -> None:
     if full_suite:
         with_ollama = True
         enforce_thresholds_flag = True
+    resolved_benchmark_id = benchmark_id
+    if with_adversarial and not resolved_benchmark_id.endswith("_adv"):
+        resolved_benchmark_id = f"{resolved_benchmark_id}_adv"
+    resolved_output = output
+    if with_adversarial and output == Path(".reports/benchmark/latest.json"):
+        resolved_output = Path(".reports/benchmark/adversarial_latest.json")
+    task_pack = benchmark_task_pack(include_adversarial=with_adversarial)
     ollama_settings = None
     prompt_settings = None
     if with_ollama:
@@ -1190,18 +1205,20 @@ def benchmark_run(
     try:
         report = run_golden_benchmark(
             tasks_root=tasks_root,
-            benchmark_id=benchmark_id,
+            benchmark_id=resolved_benchmark_id,
             run_id=run_id,
             ollama_config=ollama_settings,
             ollama_prompt_config=prompt_settings,
+            include_adversarial=with_adversarial,
         )
     except OllamaError as exc:
         typer.echo(f"FAIL ollama {exc}")
         raise typer.Exit(code=1) from exc
     written = write_benchmark_report(
         report,
-        output,
+        resolved_output,
         append_history=not skip_history,
+        task_pack=task_pack,
     )
     status = "PASS" if report.aggregate.fail_count == 0 else "FAIL"
     mode = report.run_mode
@@ -1223,18 +1240,18 @@ def benchmark_run(
             f"output_tps={report.cost.output_tokens_per_second} "
             f"usd={report.cost.estimated_cost_usd}"
         )
-    typer.echo(f"REPORT {written}")
-    summary_path = output.parent / f"{report.run_id}_summary.md"
+    typer.echo(f"REPORT {written} pack={task_pack}")
+    summary_path = resolved_output.parent / f"{report.run_id}_summary.md"
     if summary_path.exists():
         typer.echo(f"SUMMARY {summary_path}")
     typer.echo(
         f"METRICS active_memory_with_evidence={report.aggregate.memory_metrics.active_memory_with_evidence} "
         f"retrieval_mrr={report.aggregate.retrieval_metrics.mrr}"
     )
-    typer.echo(f"SPLIT harness={output.parent / f'{report.run_id}_harness_scores.json'}")
+    typer.echo(f"SPLIT harness={resolved_output.parent / f'{report.run_id}_harness_scores.json'}")
     if report.run_mode == "harness+ollama":
-        typer.echo(f"SPLIT llm={output.parent / f'{report.run_id}_llm_scores.json'}")
-    typer.echo(f"SPLIT blended={output.parent / f'{report.run_id}_blended_scores.json'}")
+        typer.echo(f"SPLIT llm={resolved_output.parent / f'{report.run_id}_llm_scores.json'}")
+    typer.echo(f"SPLIT blended={resolved_output.parent / f'{report.run_id}_blended_scores.json'}")
     typer.echo(render_summary_table(report))
     for task in report.tasks:
         item_status = task.result.upper()
@@ -1255,7 +1272,7 @@ def benchmark_run(
     exit_code = 1 if report.aggregate.fail_count > 0 else 0
     if enforce_thresholds_flag:
         thresholds = load_benchmark_thresholds(thresholds_config)
-        violations = enforce_thresholds(report, thresholds)
+        violations = enforce_thresholds(report, thresholds, adversarial_pack=with_adversarial)
         if violations:
             typer.echo("THRESHOLD_FAIL")
             for violation in violations:
@@ -1263,6 +1280,27 @@ def benchmark_run(
             exit_code = 1
         else:
             typer.echo("THRESHOLD_PASS")
+    if enforce_history:
+        policy = load_regression_policy(regression_config)
+        history_path = resolved_output.parent / "history.jsonl"
+        regressions = enforce_regression_gate(
+            report,
+            history_path=history_path,
+            policy=policy,
+            task_pack=task_pack,
+        )
+        if regressions:
+            typer.echo("REGRESSION_FAIL")
+            for item in regressions:
+                typer.echo(f"  {item}")
+            exit_code = 1
+        else:
+            typer.echo("REGRESSION_PASS")
+    if not skip_dashboard:
+        dash_path = write_benchmark_dashboard(resolved_output.parent)
+        typer.echo(f"DASHBOARD {dash_path}")
+        summary_path = write_overall_summary(resolved_output.parent)
+        typer.echo(f"OVERALL_SUMMARY {summary_path}")
     if exit_code != 0:
         raise typer.Exit(code=exit_code)
 
@@ -1304,6 +1342,77 @@ def benchmark_trend(
 ) -> None:
     entries = load_benchmark_history(history, limit=last)
     typer.echo(render_trend_table(entries))
+
+
+@app.command("benchmark-regression-gate")
+def benchmark_regression_gate(
+    history: Path = typer.Option(Path(".reports/benchmark/history.jsonl")),
+    report: Path = typer.Option(Path(".reports/benchmark/latest.json")),
+    regression_config: Path = typer.Option(Path("configs/benchmark_regression.yaml")),
+    task_pack: str | None = typer.Option(None, "--pack"),
+) -> None:
+    from ai_local.benchmark.regression import enforce_regression_gate_from_paths
+
+    policy = load_regression_policy(regression_config)
+    violations = enforce_regression_gate_from_paths(
+        report_path=report,
+        history_path=history,
+        policy=policy,
+        task_pack=task_pack,
+    )
+    if violations:
+        typer.echo("REGRESSION_FAIL")
+        for violation in violations:
+            typer.echo(f"  {violation}")
+        raise typer.Exit(code=1)
+    typer.echo("REGRESSION_PASS")
+
+
+@app.command("benchmark-compare-models")
+def benchmark_compare_models(
+    models_config: Path = typer.Option(Path("configs/benchmark_models.yaml")),
+    with_adversarial: bool = typer.Option(False, "--with-adversarial"),
+    skip_dashboard: bool = typer.Option(False, "--skip-dashboard"),
+) -> None:
+    from ai_local.benchmark.compare import run_model_comparison
+
+    try:
+        comparison_path = run_model_comparison(
+            models_config=models_config,
+            with_adversarial=with_adversarial,
+        )
+    except OllamaError as exc:
+        typer.echo(f"FAIL compare {exc}")
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"COMPARISON {comparison_path}")
+    if not skip_dashboard:
+        dash_path = write_benchmark_dashboard(Path(".reports/benchmark"))
+        typer.echo(f"DASHBOARD {dash_path}")
+
+
+@app.command("benchmark-overall-summary")
+def benchmark_overall_summary(
+    report_dir: Path = typer.Option(Path(".reports/benchmark"), "--dir"),
+    output: Path = typer.Option(Path(".reports/benchmark/overall_summary.md")),
+) -> None:
+    written = write_overall_summary(report_dir, output=output)
+    typer.echo(f"OVERALL_SUMMARY {written}")
+
+
+@app.command("benchmark-dashboard")
+def benchmark_dashboard(
+    report_dir: Path = typer.Option(Path(".reports/benchmark"), "--dir"),
+    output: Path = typer.Option(Path(".reports/benchmark/dashboard.md")),
+    regression_config: Path = typer.Option(Path("configs/benchmark_regression.yaml")),
+    thresholds_config: Path = typer.Option(Path("configs/benchmark_thresholds.yaml")),
+) -> None:
+    written = write_benchmark_dashboard(
+        report_dir,
+        output=output,
+        regression_config=regression_config,
+        thresholds_config=thresholds_config,
+    )
+    typer.echo(f"DASHBOARD {written}")
 
 
 @app.command("benchmark-ollama-check")

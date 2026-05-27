@@ -1,0 +1,10 @@
+models:
+  - name: qwen2.5:0.5b
+  - name: llama3.2:1b
+defaults:
+  with_adversarial: false
+  harness_weight: 0.5
+  ollama_config: configs/benchmark_ollama.yaml
+  ollama_prompt_config: configs/benchmark_ollama_prompt.yaml
+  tasks_root: golden_tasks
+  report_dir: .reports/benchmark/compare
