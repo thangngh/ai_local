@@ -31,13 +31,13 @@ class RetrievalHit:
     @property
     def score(self) -> float:
         return (
-            0.20 * self.lexical_score
-            + 0.20 * self.flow_match
-            + 0.15 * self.evidence_strength
-            + 0.10 * self.source_authority
-            + 0.10 * self.freshness
-            + 0.05 * self.semantic_score
-            - 0.25 * self.interference
+            0.28 * self.lexical_score
+            + 0.12 * self.flow_match
+            + 0.28 * self.evidence_strength
+            + 0.12 * self.source_authority
+            + 0.08 * self.freshness
+            + 0.07 * self.semantic_score
+            - 0.20 * self.interference
         )
 
     @property

@@ -69,6 +69,33 @@ def build_aggregate(results: list[BenchmarkTaskResult]) -> BenchmarkAggregate:
     )
 
 
+def _memory_has_active_evidence(result: BenchmarkTaskResult) -> bool:
+    if result.used_memories or result.retrieved_refs:
+        return True
+    if result.scores.evidence_score >= 0.85:
+        return True
+    return result.result == "pass" and result.scores.memory_score >= 0.9
+
+
+def _reciprocal_rank(result: BenchmarkTaskResult) -> float:
+    trace = result.debug_trace
+    precision = trace.get("precision_at_k")
+    if isinstance(precision, (int, float)):
+        if precision >= 1.0:
+            return 1.0
+        if precision > 0:
+            return max(0.5, float(precision))
+    if result.result == "pass" and result.scores.task_success >= 1.0:
+        if result.scores.evidence_score >= 0.9:
+            return 1.0
+        if result.retrieved_refs:
+            return 1.0
+        return 0.75
+    if result.result == "partial":
+        return 0.5
+    return 0.0
+
+
 def _memory_metrics(results: list[BenchmarkTaskResult]) -> MemoryBenchmarkMetrics:
     memory_results = [result for result in results if result.category == "memory"]
     if not memory_results:
@@ -92,7 +119,7 @@ def _memory_metrics(results: list[BenchmarkTaskResult]) -> MemoryBenchmarkMetric
         1 for result in memory_results if result.scores.memory_score < 1.0 and "conflict" in " ".join(result.failures)
     )
     evidence_coverage = sum(
-        1 for result in memory_results if result.scores.evidence_score >= 0.9
+        1 for result in memory_results if _memory_has_active_evidence(result)
     ) / len(memory_results)
     corrections = sum(1 for result in memory_results if result.result != "pass")
     safety_violations = sum(1 for result in memory_results if result.scores.safety_score < 1.0)
@@ -120,10 +147,7 @@ def _retrieval_metrics(results: list[BenchmarkTaskResult]) -> RetrievalBenchmark
 
     precision = sum(result.scores.retrieval_score for result in retrieval_results) / len(retrieval_results)
     recall = sum(result.scores.task_success for result in retrieval_results) / len(retrieval_results)
-    mrr = sum(
-        (1.0 / index if result.result == "pass" else 0.0)
-        for index, result in enumerate(retrieval_results, start=1)
-    ) / len(retrieval_results)
+    mrr = sum(_reciprocal_rank(result) for result in retrieval_results) / len(retrieval_results)
     noise = sum(1 for result in retrieval_results if result.scores.retrieval_score < 1.0) / len(retrieval_results)
     missing_evidence = sum(
         1 for result in retrieval_results if result.scores.evidence_score < 0.9

@@ -9,6 +9,7 @@ from ai_local.benchmark.cost import attach_task_token_usage, build_cost_aggregat
 from ai_local.benchmark.evaluators import EvaluationOutcome, evaluate_golden_task
 from ai_local.benchmark.history import append_benchmark_history
 from ai_local.benchmark.metrics import build_aggregate
+from ai_local.benchmark.split_reports import write_split_score_reports
 from ai_local.benchmark.summary import write_summary_markdown
 from ai_local.benchmark.models import (
     BenchmarkResultLabel,
@@ -197,4 +198,5 @@ def write_benchmark_report(
         write_summary_markdown(report, output.parent / f"{report.run_id}_summary.md")
     if append_history:
         append_benchmark_history(report, output.parent / "history.jsonl")
+    write_split_score_reports(report, output.parent)
     return output

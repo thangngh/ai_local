@@ -1168,7 +1168,11 @@ def benchmark_run(
     enforce_thresholds_flag: bool = typer.Option(False, "--enforce-thresholds"),
     thresholds_config: Path = typer.Option(Path("configs/benchmark_thresholds.yaml")),
     skip_history: bool = typer.Option(False, "--skip-history"),
+    full_suite: bool = typer.Option(False, "--full-suite", help="Run harness+ollama with thresholds and history"),
 ) -> None:
+    if full_suite:
+        with_ollama = True
+        enforce_thresholds_flag = True
     ollama_settings = None
     prompt_settings = None
     if with_ollama:
@@ -1223,6 +1227,14 @@ def benchmark_run(
     summary_path = output.parent / f"{report.run_id}_summary.md"
     if summary_path.exists():
         typer.echo(f"SUMMARY {summary_path}")
+    typer.echo(
+        f"METRICS active_memory_with_evidence={report.aggregate.memory_metrics.active_memory_with_evidence} "
+        f"retrieval_mrr={report.aggregate.retrieval_metrics.mrr}"
+    )
+    typer.echo(f"SPLIT harness={output.parent / f'{report.run_id}_harness_scores.json'}")
+    if report.run_mode == "harness+ollama":
+        typer.echo(f"SPLIT llm={output.parent / f'{report.run_id}_llm_scores.json'}")
+    typer.echo(f"SPLIT blended={output.parent / f'{report.run_id}_blended_scores.json'}")
     typer.echo(render_summary_table(report))
     for task in report.tasks:
         item_status = task.result.upper()
