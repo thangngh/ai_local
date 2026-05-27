@@ -1185,7 +1185,9 @@ def benchmark_run(
     if with_adversarial and not resolved_benchmark_id.endswith("_adv"):
         resolved_benchmark_id = f"{resolved_benchmark_id}_adv"
     resolved_output = output
-    if with_adversarial and output == Path(".reports/benchmark/latest.json"):
+    if with_adversarial and with_ollama and output == Path(".reports/benchmark/latest.json"):
+        resolved_output = Path(".reports/benchmark/adversarial_ollama_latest.json")
+    elif with_adversarial and output == Path(".reports/benchmark/latest.json"):
         resolved_output = Path(".reports/benchmark/adversarial_latest.json")
     task_pack = benchmark_task_pack(include_adversarial=with_adversarial)
     ollama_settings = None
@@ -1397,6 +1399,29 @@ def benchmark_overall_summary(
 ) -> None:
     written = write_overall_summary(report_dir, output=output)
     typer.echo(f"OVERALL_SUMMARY {written}")
+
+
+@app.command("benchmark-release-decision")
+def benchmark_release_decision(
+    report_dir: Path = typer.Option(Path(".reports/benchmark"), "--dir"),
+    thresholds_config: Path = typer.Option(Path("configs/benchmark_thresholds.yaml")),
+    regression_config: Path = typer.Option(Path("configs/benchmark_regression.yaml")),
+    block_on_warnings: bool = typer.Option(False, "--block-on-warnings"),
+) -> None:
+    from ai_local.benchmark.release_decision import compute_release_decision
+
+    decision = compute_release_decision(
+        report_dir,
+        thresholds_config=thresholds_config,
+        regression_config=regression_config,
+    )
+    typer.echo(f"RELEASE_DECISION {decision.decision}")
+    for reason in decision.reasons:
+        typer.echo(f"  {reason}")
+    if decision.blocking:
+        raise typer.Exit(code=1)
+    if block_on_warnings and decision.decision == "PASS_WITH_WARNINGS":
+        raise typer.Exit(code=1)
 
 
 @app.command("benchmark-dashboard")

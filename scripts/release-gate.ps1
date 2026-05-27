@@ -56,6 +56,17 @@ Invoke-Step "benchmark-adversarial" @(
     "--skip-dashboard"
 )
 
+Invoke-Step "benchmark-ollama-check" @("-m", "ai_local.cli", "benchmark-ollama-check")
+Invoke-Step "benchmark-adversarial-ollama" @(
+    "-m", "ai_local.cli", "benchmark-run",
+    "--with-adversarial",
+    "--with-ollama",
+    "--output", ".reports/benchmark/adversarial_ollama_latest.json",
+    "--enforce-thresholds",
+    "--enforce-history",
+    "--skip-dashboard"
+)
+
 Invoke-Step "benchmark-regression-gate" @(
     "-m", "ai_local.cli", "benchmark-regression-gate",
     "--report", ".reports/benchmark/latest.json",
@@ -68,7 +79,6 @@ Invoke-Step "benchmark-regression-adversarial" @(
 )
 
 if (-not $SkipModelCompare) {
-    Invoke-Step "benchmark-ollama-check" @("-m", "ai_local.cli", "benchmark-ollama-check")
     Invoke-Step "benchmark-compare-models" @(
         "-m", "ai_local.cli", "benchmark-compare-models",
         "--skip-dashboard"
@@ -77,5 +87,6 @@ if (-not $SkipModelCompare) {
 
 Invoke-Step "benchmark-dashboard" @("-m", "ai_local.cli", "benchmark-dashboard")
 Invoke-Step "benchmark-overall-summary" @("-m", "ai_local.cli", "benchmark-overall-summary")
+Invoke-Step "benchmark-release-decision" @("-m", "ai_local.cli", "benchmark-release-decision")
 
 Write-Host "PASS release-gate"

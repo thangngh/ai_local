@@ -27,6 +27,9 @@ Skip model comparison when Ollama is unavailable:
 7. `benchmark-compare-models` (requires Ollama; skipped with `-SkipModelCompare`)
 8. `benchmark-dashboard` → `.reports/benchmark/dashboard.md`
 9. `benchmark-overall-summary` → `.reports/benchmark/overall_summary.md`
+10. `benchmark-release-decision` → PASS / PASS_WITH_WARNINGS / BLOCK (exit 1 on BLOCK)
+
+Adversarial + Ollama artifact: `.reports/benchmark/adversarial_ollama_latest.json`
 
 Configuration: `configs/benchmark_release_gate.yaml`.
 

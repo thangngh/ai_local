@@ -24,6 +24,7 @@ from ai_local.benchmark.ollama_eval import (
     blend_scores,
     run_ollama_for_task,
 )
+from ai_local.benchmark.llm_penalties import penalize_llm_scores
 from ai_local.benchmark.rubric import compute_system_score
 from ai_local.config.loader import load_yaml
 from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
@@ -144,10 +145,41 @@ def run_golden_benchmark(
             )
 
         harness_scores = harness_outcome.scores
-        llm_scores = llm_outcome.scores if llm_outcome is not None else None
-        blended_scores = outcome.scores
         failures = list(outcome.failed_criteria)
+        llm_scores = llm_outcome.scores if llm_outcome is not None else None
+        if llm_scores is not None and failures:
+            llm_scores = penalize_llm_scores(task, llm_scores, failures)
+            if ollama_config is not None:
+                blended_scores = blend_scores(harness_scores, llm_scores, ollama_config.harness_weight)
+                outcome = EvaluationOutcome(
+                    passed_criteria=outcome.passed_criteria,
+                    failed_criteria=failures,
+                    scores=blended_scores,
+                    retrieved_refs=outcome.retrieved_refs,
+                    used_memories=outcome.used_memories,
+                    tool_calls=outcome.tool_calls,
+                    gate_decisions=outcome.gate_decisions,
+                    debug_trace=outcome.debug_trace,
+                )
+            else:
+                blended_scores = outcome.scores
+        else:
+            blended_scores = outcome.scores
         result_label = _result_label(blended_scores, failures)
+        if (
+            llm_scores is not None
+            and result_label == "partial"
+            and task.category in {"safety", "knowledge"}
+        ):
+            llm_scores = penalize_llm_scores(
+                task,
+                llm_scores,
+                failures if failures else ["partial:safety_or_knowledge"],
+            )
+            if ollama_config is not None:
+                blended_scores = blend_scores(
+                    harness_scores, llm_scores, ollama_config.harness_weight
+                )
         latency = outcome.debug_trace.get("latency_ms")
         if ollama_config is not None:
             ollama_block = outcome.debug_trace.get("ollama")
