@@ -101,6 +101,46 @@ Outputs:
 
 - `latest.json` — full report with aggregate metrics
 - `{run_id}_tasks.jsonl` — one JSON line per task (replay trace)
+- `{run_id}_summary.md` — markdown table (harness / llm / blended per task)
+- `history.jsonl` — append-only run history for trends
+
+### Split scores (harness / llm / blended)
+
+Each task stores `harness_scores`, optional `llm_scores`, and blended `scores`. Aggregates include `harness_system_score` and optional `llm_system_score`.
+
+### Replay & trend
+
+```powershell
+.\.venv\Scripts\python -m ai_local.cli benchmark-replay --run .reports/benchmark/latest.json
+.\.venv\Scripts\python -m ai_local.cli benchmark-replay --run-id run_20260527_044101 --dir .reports/benchmark
+.\.venv\Scripts\python -m ai_local.cli benchmark-replay --run .reports/benchmark/ollama_latest.json --only-flagged --llm-alert-below 0.75
+.\.venv\Scripts\python -m ai_local.cli benchmark-trend --last 5
+```
+
+`benchmark-replay` prints harness / llm / blended per task, highlights tasks with failures or `llm_system_score` below `--llm-alert-below` (default `0.70`).
+
+### Regression thresholds
+
+```powershell
+.\.venv\Scripts\python -m ai_local.cli benchmark-run --enforce-thresholds
+```
+
+Thresholds: `configs/benchmark_thresholds.yaml`.
+
+### Live repo retrieval
+
+Tasks with `evaluator: live_retrieval` index the real repo (`refresh_and_retrieve_project`) and score evidence + `ContextPackage.decision`.
+
+### Ollama few-shot prompt
+
+`configs/benchmark_ollama_prompt.yaml` — system template + few-shot examples for `qwen2.5:0.5b`.
+
+### Full local gate
+
+```powershell
+.\scripts\full-gate.ps1
+.\scripts\full-gate.ps1 -WithOllama
+```
 
 ## Task schema
 
@@ -130,6 +170,7 @@ Outputs:
 | tool_sandbox | `validate_sandbox_request` |
 | knowledge_claim | `infer_knowledge_decision` |
 | evidence_rank | `rank_band` / `calculate_rank` |
+| live_retrieval | `refresh_and_retrieve_project` + indexed evidence |
 
 ## Aggregate metrics
 

@@ -1,0 +1,77 @@
+name: Gate
+
+on:
+  push:
+    branches: [main, master, benchmark]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Phase fast gate tests
+        run: pytest tests/harness -q
+      - name: Phase fast gate smoke
+        run: python -m ai_local.cli phase-fast-gate --clean --output .reports/phase-fast-gate/ci.json
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check ai_local tests
+      - name: Mypy
+        run: mypy ai_local
+
+  benchmark-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Benchmark harness run
+        run: |
+          python -m ai_local.cli benchmark-run \
+            --output .reports/benchmark/ci.json \
+            --enforce-thresholds \
+            --skip-history
+
+  benchmark-ollama:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ollama benchmark (manual)
+        run: |
+          python -m ai_local.cli benchmark-ollama-check
+          python -m ai_local.cli benchmark-run --with-ollama --output .reports/benchmark/ollama_ci.json

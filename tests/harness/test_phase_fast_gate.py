@@ -126,6 +126,39 @@ phase_fast_gates:
     assert summary.results[0].summary == "unknown fast gate runner"
 
 
+def test_phase_fast_gate_clean_workspace_is_idempotent(tmp_path: Path) -> None:
+    config = tmp_path / "phase_fast_gates.yaml"
+    workspace = tmp_path / "workspace"
+    config.write_text(
+        """
+phase_fast_gates:
+  source_ref: clean_subset
+  gates:
+    - id: store
+      phase: phase_10_production_hardening
+      runner: runtime_store_smoke
+    - id: queue_ops
+      phase: phase_11_operator_tui
+      runner: queue_operations_smoke
+""",
+        encoding="utf-8",
+    )
+    first = run_phase_fast_gates(
+        config_path=config,
+        root=ROOT,
+        workspace_root=workspace,
+        clean=True,
+    )
+    second = run_phase_fast_gates(
+        config_path=config,
+        root=ROOT,
+        workspace_root=workspace,
+        clean=True,
+    )
+    assert first.passed
+    assert second.passed
+
+
 def test_phase_fast_gate_report_writer_persists_json_artifact(tmp_path: Path) -> None:
     config = tmp_path / "phase_fast_gates.yaml"
     output = tmp_path / "reports" / "phase-fast.json"

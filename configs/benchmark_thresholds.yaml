@@ -1,0 +1,7 @@
+harness:
+  min_system_score: 0.90
+  max_fail_count: 0
+ollama:
+  min_blended_score: 0.80
+  min_llm_score: 0.70
+  max_total_tokens: 50000

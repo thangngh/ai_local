@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -68,13 +68,21 @@ def test_load_ollama_benchmark_config() -> None:
     assert config.harness_weight == 0.5
 
 
+def test_load_ollama_prompt_config() -> None:
+    from ai_local.benchmark.ollama_eval import load_ollama_prompt_config
+
+    prompt = load_ollama_prompt_config(Path("configs/benchmark_ollama_prompt.yaml"))
+    assert "DECISION:" in prompt.system
+    assert len(prompt.few_shot) >= 2
+
+
 @patch.object(OllamaClient, "chat")
 @patch.object(OllamaClient, "ensure_model")
 @patch.object(OllamaClient, "health_check", return_value=True)
 def test_run_golden_benchmark_with_ollama_mock(
-    _health: object,
-    _ensure: object,
-    chat: object,
+    _health: MagicMock,
+    _ensure: MagicMock,
+    chat: MagicMock,
 ) -> None:
     chat.return_value = _chat_result(
         "DECISION: continue\nEVIDENCE: ai_local/queue/worker.py\nRATIONALE: ok\n",
@@ -90,7 +98,8 @@ def test_run_golden_benchmark_with_ollama_mock(
     )
     assert report.run_mode == "harness+ollama"
     assert report.ollama_model == "qwen2.5:0.5b"
-    assert report.aggregate.total == 20
+    assert report.aggregate.total >= 20
+    assert report.aggregate.harness_system_score > 0.0
     assert all("ollama" in task.debug_trace for task in report.tasks)
     assert report.cost.total_input_tokens > 0
     assert report.cost.total_output_tokens > 0

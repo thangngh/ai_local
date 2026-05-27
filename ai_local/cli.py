@@ -36,12 +36,17 @@ from ai_local.harness.memory_governance_gate import run_memory_governance_promot
 from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
 from ai_local.harness.global_developer_harness import run_global_developer_harness
 from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
-from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig
+from ai_local.doctor import run_doctor
+from ai_local.benchmark.history import load_benchmark_history, render_trend_table
+from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig, load_ollama_prompt_config
+from ai_local.benchmark.replay import load_benchmark_report, render_replay_report
 from ai_local.benchmark.runner import (
     load_ollama_benchmark_config,
     run_golden_benchmark,
     write_benchmark_report,
 )
+from ai_local.benchmark.summary import render_summary_table
+from ai_local.benchmark.thresholds import enforce_thresholds, load_benchmark_thresholds
 from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
 from ai_local.harness.phase_fast_gate import run_phase_fast_gates, write_phase_fast_gate_report
 from ai_local.indexer.project import (
@@ -1158,9 +1163,14 @@ def benchmark_run(
     ollama_model: str = typer.Option("qwen2.5:0.5b", "--ollama-model"),
     ollama_base_url: str = typer.Option("http://127.0.0.1:11434", "--ollama-base-url"),
     ollama_config: Path = typer.Option(Path("configs/benchmark_ollama.yaml")),
+    ollama_prompt_config: Path = typer.Option(Path("configs/benchmark_ollama_prompt.yaml")),
     harness_weight: float | None = typer.Option(None, min=0.0, max=1.0),
+    enforce_thresholds_flag: bool = typer.Option(False, "--enforce-thresholds"),
+    thresholds_config: Path = typer.Option(Path("configs/benchmark_thresholds.yaml")),
+    skip_history: bool = typer.Option(False, "--skip-history"),
 ) -> None:
     ollama_settings = None
+    prompt_settings = None
     if with_ollama:
         base_settings = load_ollama_benchmark_config(ollama_config)
         ollama_settings = OllamaBenchmarkConfig(
@@ -1168,26 +1178,37 @@ def benchmark_run(
             model=ollama_model,
             timeout_seconds=base_settings.timeout_seconds,
             harness_weight=harness_weight if harness_weight is not None else base_settings.harness_weight,
+            input_usd_per_1m=base_settings.input_usd_per_1m,
+            output_usd_per_1m=base_settings.output_usd_per_1m,
         )
+        if ollama_prompt_config.exists():
+            prompt_settings = load_ollama_prompt_config(ollama_prompt_config)
     try:
         report = run_golden_benchmark(
             tasks_root=tasks_root,
             benchmark_id=benchmark_id,
             run_id=run_id,
             ollama_config=ollama_settings,
+            ollama_prompt_config=prompt_settings,
         )
     except OllamaError as exc:
         typer.echo(f"FAIL ollama {exc}")
         raise typer.Exit(code=1) from exc
-    written = write_benchmark_report(report, output)
+    written = write_benchmark_report(
+        report,
+        output,
+        append_history=not skip_history,
+    )
     status = "PASS" if report.aggregate.fail_count == 0 else "FAIL"
     mode = report.run_mode
     model_suffix = f" model={report.ollama_model}" if report.ollama_model else ""
     typer.echo(
         f"{status} benchmark_run id={report.benchmark_id} run={report.run_id} mode={mode}{model_suffix} "
-        f"score={report.aggregate.system_score} tier={report.aggregate.tier} "
-        f"passed={report.aggregate.pass_count}/{report.aggregate.total}"
+        f"score={report.aggregate.system_score} harness={report.aggregate.harness_system_score} "
+        f"tier={report.aggregate.tier} passed={report.aggregate.pass_count}/{report.aggregate.total}"
     )
+    if report.aggregate.llm_system_score is not None:
+        typer.echo(f"LLM_SCORE {report.aggregate.llm_system_score}")
     if report.cost.total_tokens > 0:
         typer.echo(
             "COST "
@@ -1199,6 +1220,10 @@ def benchmark_run(
             f"usd={report.cost.estimated_cost_usd}"
         )
     typer.echo(f"REPORT {written}")
+    summary_path = output.parent / f"{report.run_id}_summary.md"
+    if summary_path.exists():
+        typer.echo(f"SUMMARY {summary_path}")
+    typer.echo(render_summary_table(report))
     for task in report.tasks:
         item_status = task.result.upper()
         token_suffix = ""
@@ -1207,12 +1232,66 @@ def benchmark_run(
                 f" in={task.token_usage.input_tokens} out={task.token_usage.output_tokens} "
                 f"usd={task.token_usage.estimated_cost_usd}"
             )
+        llm_suffix = (
+            f" llm={task.llm_system_score:.2f}" if task.llm_system_score is not None else ""
+        )
         typer.echo(
             f"{item_status} {task.task_id} category={task.category} "
-            f"system_score={task.system_score} failures={len(task.failures)}{token_suffix}"
+            f"harness={task.harness_system_score:.2f}{llm_suffix} blend={task.system_score:.2f} "
+            f"failures={len(task.failures)}{token_suffix}"
         )
-    if report.aggregate.fail_count > 0:
+    exit_code = 1 if report.aggregate.fail_count > 0 else 0
+    if enforce_thresholds_flag:
+        thresholds = load_benchmark_thresholds(thresholds_config)
+        violations = enforce_thresholds(report, thresholds)
+        if violations:
+            typer.echo("THRESHOLD_FAIL")
+            for violation in violations:
+                typer.echo(f"  {violation}")
+            exit_code = 1
+        else:
+            typer.echo("THRESHOLD_PASS")
+    if exit_code != 0:
+        raise typer.Exit(code=exit_code)
+
+
+@app.command("benchmark-replay")
+def benchmark_replay(
+    run: Path | None = typer.Option(None, "--run", help="Path to benchmark JSON report"),
+    run_id: str | None = typer.Option(None, "--run-id"),
+    report_dir: Path = typer.Option(Path(".reports/benchmark"), "--dir"),
+    llm_alert_below: float = typer.Option(0.70, "--llm-alert-below", min=0.0, max=1.0),
+    only_flagged: bool = typer.Option(False, "--only-flagged"),
+) -> None:
+    if run is None:
+        if run_id is None:
+            run = report_dir / "latest.json"
+        else:
+            run = report_dir / f"{run_id}.json"
+            if not run.exists():
+                candidates = sorted(report_dir.glob(f"{run_id}*.json"))
+                if candidates:
+                    run = candidates[0]
+    if run is None or not run.exists():
+        typer.echo("FAIL benchmark_replay report not found")
         raise typer.Exit(code=1)
+    report = load_benchmark_report(run)
+    typer.echo(
+        render_replay_report(
+            report,
+            llm_alert_below=llm_alert_below,
+            only_flagged=only_flagged,
+        )
+    )
+
+
+@app.command("benchmark-trend")
+def benchmark_trend(
+    history: Path = typer.Option(Path(".reports/benchmark/history.jsonl")),
+    last: int = typer.Option(10, "--last", min=1),
+) -> None:
+    entries = load_benchmark_history(history, limit=last)
+    typer.echo(render_trend_table(entries))
 
 
 @app.command("benchmark-ollama-check")
@@ -1244,16 +1323,44 @@ def benchmark_ollama_check(
 
 
 @app.command()
+def doctor(
+    root: Path = typer.Option(Path(".")),
+    ollama_model: str = typer.Option("qwen2.5:0.5b", "--ollama-model"),
+    ollama_base_url: str = typer.Option("http://127.0.0.1:11434", "--ollama-base-url"),
+    skip_ollama: bool = typer.Option(False, "--skip-ollama"),
+    skip_ripgrep: bool = typer.Option(False, "--skip-ripgrep"),
+) -> None:
+    report = run_doctor(
+        root=root,
+        ollama_base_url=ollama_base_url,
+        ollama_model=ollama_model,
+        check_ollama=not skip_ollama,
+        check_ripgrep=not skip_ripgrep,
+    )
+    status = "PASS" if report.passed else "FAIL"
+    typer.echo(f"{status} doctor checks={len(report.checks)}")
+    for check in report.checks:
+        item_status = "PASS" if check.passed else "FAIL"
+        typer.echo(f"{item_status} {check.name} {check.detail}")
+    if not report.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def phase_fast_gate(
     config: Path = typer.Option(Path("configs/phase_fast_gates.yaml")),
     root: Path = typer.Option(Path(".")),
     workspace_root: Path = typer.Option(Path(".reports/phase-fast-gate")),
     output: Path | None = typer.Option(None),
+    clean: bool = typer.Option(False, "--clean"),
+    unique_workspace: bool = typer.Option(False, "--unique-workspace"),
 ) -> None:
     summary = run_phase_fast_gates(
         config_path=config,
         root=root,
         workspace_root=workspace_root,
+        clean=clean,
+        unique_workspace=unique_workspace,
     )
     if output is not None:
         write_phase_fast_gate_report(summary, output)

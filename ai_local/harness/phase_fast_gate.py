@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 from typing import Any
 
 from ai_local.agent.state import AgentRun, AgentRunStatus
@@ -110,14 +112,45 @@ def load_phase_fast_gate_cases(config_path: Path) -> tuple[str, list[PhaseFastGa
     return str(config.get("source_ref", "")), cases
 
 
+def prepare_phase_fast_workspace(
+    workspace_root: Path,
+    *,
+    clean: bool = False,
+    unique: bool = False,
+) -> Path:
+    if unique:
+        resolved = workspace_root / f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+    else:
+        resolved = workspace_root
+    if clean and resolved.exists():
+        shutil.rmtree(resolved, ignore_errors=True)
+    if clean and resolved.exists():
+        try:
+            next(resolved.iterdir())
+            resolved = workspace_root / f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+        except StopIteration:
+            pass
+    resolved.mkdir(parents=True, exist_ok=True)
+    return resolved
+
+
 def run_phase_fast_gates(
     *,
     config_path: Path,
     root: Path,
     workspace_root: Path,
+    clean: bool = False,
+    unique_workspace: bool = False,
 ) -> PhaseFastGateSummary:
+    resolved_workspace = prepare_phase_fast_workspace(
+        workspace_root,
+        clean=clean or unique_workspace,
+        unique=unique_workspace,
+    )
     source_ref, cases = load_phase_fast_gate_cases(config_path)
-    results = [_run_case(case, root=root, workspace_root=workspace_root) for case in cases]
+    results = [
+        _run_case(case, root=root, workspace_root=resolved_workspace) for case in cases
+    ]
     passed_count = sum(1 for result in results if result.passed)
     return PhaseFastGateSummary(
         passed=passed_count == len(results),
@@ -126,7 +159,7 @@ def run_phase_fast_gates(
         passed_count=passed_count,
         results=results,
         generated_at=datetime.now(UTC).isoformat(),
-        workspace_root=str(workspace_root),
+        workspace_root=str(resolved_workspace),
     )
 
 

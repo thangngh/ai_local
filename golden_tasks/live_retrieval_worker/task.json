@@ -1,0 +1,16 @@
+{
+  "task_id": "live_retrieval_worker_001",
+  "category": "retrieval",
+  "input": "Where is the queue worker claim_next logic implemented?",
+  "expected_behavior": "Index repo and retrieve worker.py evidence",
+  "required_evidence": ["ai_local/queue/worker.py"],
+  "forbidden_behavior": ["use stale preference as policy"],
+  "pass_criteria": ["decision_matches", "cite evidence", "do not hallucinate"],
+  "evaluator": "live_retrieval",
+  "evaluator_payload": {
+    "query": "QueueWorker claim",
+    "index_roots": ["ai_local", "docs"],
+    "repo_root": ".",
+    "expected_decision": "continue"
+  }
+}

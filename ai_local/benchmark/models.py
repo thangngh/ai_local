@@ -75,8 +75,12 @@ class BenchmarkTaskResult(BaseModel):
     task_id: str
     category: str
     result: BenchmarkResultLabel
+    harness_scores: BenchmarkScores
+    llm_scores: BenchmarkScores | None = None
     scores: BenchmarkScores
     system_score: float
+    harness_system_score: float
+    llm_system_score: float | None = None
     failures: list[str] = Field(default_factory=list)
     retrieved_refs: list[str] = Field(default_factory=list)
     used_memories: list[str] = Field(default_factory=list)
@@ -114,6 +118,8 @@ class PatchBenchmarkMetrics(BaseModel):
 
 class BenchmarkAggregate(BaseModel):
     system_score: float
+    harness_system_score: float = 0.0
+    llm_system_score: float | None = None
     tier: str
     pass_count: int
     partial_count: int

@@ -1,6 +1,8 @@
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 
 @dataclass(frozen=True)
@@ -10,9 +12,43 @@ class RipgrepMatch:
     text: str
 
 
-def rg_search(pattern: str, root: Path, timeout_seconds: int = 10) -> str:
+def _rg_executable() -> str | None:
+    on_path = shutil.which("rg")
+    if on_path:
+        return on_path
+    # If callers run via `.venv/Scripts/python`, PATH may not include `.venv/Scripts`.
+    exe = Path(sys.executable).resolve()
+    candidate = exe.parent / ("rg.exe" if sys.platform.startswith("win") else "rg")
+    return str(candidate) if candidate.exists() else None
+
+
+def ripgrep_available() -> bool:
+    return _rg_executable() is not None
+
+
+def ripgrep_version() -> str | None:
+    if not ripgrep_available():
+        return None
+    rg = _rg_executable()
+    if rg is None:
+        return None
     completed = subprocess.run(
-        ["rg", "--line-number", "--no-heading", "--color", "never", pattern],
+        [rg, "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    first_line = completed.stdout.splitlines()[0] if completed.stdout else ""
+    return first_line.strip() or None
+
+
+def rg_search(pattern: str, root: Path, timeout_seconds: int = 10) -> str:
+    rg = _rg_executable()
+    if rg is None:
+        msg = "ripgrep (rg) is not installed or not on PATH"
+        raise FileNotFoundError(msg)
+    completed = subprocess.run(
+        [rg, "--line-number", "--no-heading", "--color", "never", pattern],
         cwd=root,
         capture_output=True,
         text=True,

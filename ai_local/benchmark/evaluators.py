@@ -4,8 +4,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 from ai_local.benchmark.models import BenchmarkScores, GoldenTask
+from ai_local.indexer.models import IndexBatchResult
+from ai_local.indexer.scanner import index_changed_paths, scan_files
+from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+from ai_local.retrieval.models import ContextPackage
+from ai_local.retrieval.retriever import retrieve_index
 from ai_local.harness.evidence_rank_gate import EvidenceRankCase, calculate_rank, rank_band
 from ai_local.harness.knowledge_gate import KnowledgeCase, infer_knowledge_decision
 from ai_local.harness.memory_governance_gate import MemoryGovernanceCase, infer_memory_governance_decision
@@ -16,7 +22,7 @@ from ai_local.harness.prompt_injection_refusal_gate import (
     detect_prompt_injection,
 )
 from ai_local.harness.retrieval_gate import RetrievalCase, infer_retrieval_decision
-from ai_local.memory.models import MemoryItem
+from ai_local.memory.models import MemoryItem, MemoryLevel, MemoryScope, MemorySensitivity, MemoryStatus
 from ai_local.memory.policy import decide_retrieval, decide_write, prefer_confirmed_memory
 from ai_local.tools.sandbox import SandboxPolicy, SandboxRunRequest, validate_sandbox_request
 
@@ -173,14 +179,33 @@ def _evaluate_memory_governance(task: GoldenTask) -> EvaluationOutcome:
 
 
 def _memory_item_from_payload(payload: dict[str, Any]) -> MemoryItem:
+    scope = payload.get("scope", "project")
+    if scope not in {"session", "global", "project", "repo"}:
+        scope = "project"
+    memory_level = payload.get("memory_level", "M3_CONFIRMED_DECISION")
+    if memory_level not in {
+        "M0_SESSION_SCRATCH",
+        "M1_PERSONAL_PREFERENCE",
+        "M2_PROJECT_CONVENTION",
+        "M3_CONFIRMED_DECISION",
+        "M4_WORKFLOW_MEMORY",
+        "M5_SAFETY_POLICY",
+    }:
+        memory_level = "M3_CONFIRMED_DECISION"
+    status = payload.get("status", "active")
+    if status not in {"candidate", "active", "stale", "archived", "quarantined"}:
+        status = "active"
+    sensitivity = payload.get("sensitivity", "public")
+    if sensitivity not in {"public", "internal", "sensitive", "secret"}:
+        sensitivity = "public"
     return MemoryItem(
         claim=str(payload.get("claim", "")),
-        scope=payload.get("scope", "project"),  # type: ignore[arg-type]
+        scope=cast(MemoryScope, scope),
         source=str(payload.get("source", "benchmark")),
         confidence=float(payload.get("confidence", 0.8)),
         risk=float(payload.get("risk", 0.1)),
-        memory_level=payload.get("memory_level", "M3_CONFIRMED_DECISION"),  # type: ignore[arg-type]
-        status=payload.get("status", "active"),  # type: ignore[arg-type]
+        memory_level=cast(MemoryLevel, memory_level),
+        status=cast(MemoryStatus, status),
         evidence_strength=float(payload.get("evidence_strength", 0.9)),
         retrieval_score=float(payload.get("retrieval_score", 0.8)),
         conflict_score=float(payload.get("conflict_score", 0.0)),
@@ -192,7 +217,7 @@ def _memory_item_from_payload(payload: dict[str, Any]) -> MemoryItem:
         harmful_usage=bool(payload.get("harmful_usage", False)),
         evidence_refs=list(payload.get("evidence_refs", [])),
         role=str(payload.get("role", "assistant")),
-        sensitivity=payload.get("sensitivity", "public"),  # type: ignore[arg-type]
+        sensitivity=cast(MemorySensitivity, sensitivity),
     )
 
 
@@ -452,8 +477,107 @@ def _evaluate_evidence_rank(task: GoldenTask) -> EvaluationOutcome:
     )
 
 
+def _scoped_refresh_and_retrieve(
+    query: str,
+    repo_root: Path,
+    store: KnowledgeIndexStore,
+    *,
+    index_roots: list[str],
+    chunk_lines: int,
+    max_hits: int,
+) -> tuple[IndexBatchResult, ContextPackage]:
+    store.initialize()
+    store.clear()
+    paths: list[Path] = []
+    for relative in index_roots:
+        target = (repo_root / relative).resolve()
+        if target.is_dir():
+            paths.extend(scan_files(target))
+    changed = index_changed_paths(paths, root=repo_root, manifest={}, chunk_lines=chunk_lines)
+    store.upsert_documents(changed.documents)
+    batch = IndexBatchResult(
+        documents=changed.documents,
+        manifest=changed.manifest,
+        skipped_paths=changed.skipped_paths,
+        unchanged_paths=changed.unchanged_paths,
+        deleted_paths=[],
+    )
+    package = retrieve_index(query, store, max_hits=max_hits)
+    return batch, package
+
+
+def _evaluate_live_retrieval(task: GoldenTask) -> EvaluationOutcome:
+    payload = task.evaluator_payload
+    query = str(payload.get("query", task.input))
+    repo_root = Path(str(payload.get("repo_root", "."))).resolve()
+    workspace_root = Path(str(payload.get("workspace_root", ".reports/benchmark-live"))).resolve()
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    store = KnowledgeIndexStore(workspace_root / f"{task.task_id}_knowledge.db")
+    index_roots_raw = payload.get("index_roots", ["ai_local", "docs"])
+    index_roots = [str(item) for item in index_roots_raw] if isinstance(index_roots_raw, list) else ["ai_local", "docs"]
+    batch, package = _scoped_refresh_and_retrieve(
+        query,
+        repo_root,
+        store,
+        index_roots=index_roots,
+        chunk_lines=int(payload.get("chunk_lines", 40)),
+        max_hits=int(payload.get("max_hits", 5)),
+    )
+    evidence_refs = package.evidence_refs
+    expected_decision = str(payload.get("expected_decision", "continue"))
+    actual_decision = package.decision
+
+    def _ref_found(required: str) -> bool:
+        normalized = required.replace("\\", "/")
+        return any(
+            normalized in ref.replace("\\", "/") or ref.replace("\\", "/").endswith(normalized)
+            for ref in evidence_refs
+        )
+
+    evidence_hits = sum(1 for ref in task.required_evidence if _ref_found(ref))
+    evidence_total = len(task.required_evidence)
+    precision_at_k = evidence_hits / evidence_total if evidence_total else 1.0
+
+    checks = {
+        "decision_matches": actual_decision == expected_decision,
+        "cite evidence": evidence_hits == evidence_total if evidence_total else bool(evidence_refs),
+        "do not hallucinate": bool(evidence_refs) or expected_decision == "verify",
+    }
+    passed, failed = _check_criteria(task, checks)
+    task_success = 1.0 if checks["decision_matches"] and checks["cite evidence"] else 0.5
+    if not checks["cite evidence"] and evidence_total:
+        task_success = 0.0
+
+    return EvaluationOutcome(
+        passed_criteria=passed,
+        failed_criteria=failed,
+        scores=BenchmarkScores(
+            task_success=task_success,
+            evidence_score=precision_at_k,
+            retrieval_score=task_success,
+            memory_score=1.0,
+            safety_score=1.0 if actual_decision != "continue" or not evidence_refs else 1.0,
+            tool_score=1.0,
+            patch_score=1.0,
+        ),
+        retrieved_refs=evidence_refs,
+        used_memories=[],
+        tool_calls=[],
+        gate_decisions=[f"live_retrieval:{actual_decision}"],
+        debug_trace={
+            "repo_root": str(repo_root),
+            "workspace_root": str(workspace_root),
+            "index_roots": index_roots,
+            "indexed_documents": len(batch.documents),
+            "precision_at_k": precision_at_k,
+            "decision_reason": package.reason,
+        },
+    )
+
+
 _EVALUATORS = {
     "retrieval": _evaluate_retrieval,
+    "live_retrieval": _evaluate_live_retrieval,
     "memory_governance": _evaluate_memory_governance,
     "memory_policy": _evaluate_memory_policy,
     "prompt_injection": _evaluate_prompt_injection,

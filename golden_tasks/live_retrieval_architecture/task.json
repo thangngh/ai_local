@@ -1,0 +1,16 @@
+{
+  "task_id": "live_retrieval_architecture_001",
+  "category": "retrieval",
+  "input": "What is the high-level architecture of ai_local?",
+  "expected_behavior": "Retrieve architecture documentation from the repo index",
+  "required_evidence": ["docs/architecture.md"],
+  "forbidden_behavior": [],
+  "pass_criteria": ["decision_matches", "cite evidence", "do not hallucinate"],
+  "evaluator": "live_retrieval",
+  "evaluator_payload": {
+    "query": "Module Layout architecture",
+    "index_roots": ["ai_local", "docs"],
+    "repo_root": ".",
+    "expected_decision": "continue"
+  }
+}

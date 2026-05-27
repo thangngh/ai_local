@@ -67,18 +67,26 @@ class OllamaClient:
             )
             raise OllamaError(msg)
 
-    def chat(self, *, system: str, user: str, model: str | None = None) -> OllamaChatResult:
+    def chat(
+        self,
+        *,
+        system: str,
+        user: str,
+        model: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+    ) -> OllamaChatResult:
         target = model or self._config.model
         started = time.perf_counter()
+        chat_messages = messages or [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
         payload = self._request(
             "POST",
             "/api/chat",
             payload={
                 "model": target,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                "messages": chat_messages,
                 "stream": False,
                 "options": {"temperature": 0},
             },
@@ -88,7 +96,11 @@ class OllamaClient:
         if not isinstance(content, str):
             content = str(content)
         latency_ms = int((time.perf_counter() - started) * 1000)
-        prompt_text = f"{system}\n{user}"
+        prompt_text = "\n".join(
+            item["content"]
+            for item in chat_messages
+            if isinstance(item.get("content"), str)
+        )
         input_tokens = _coerce_int(payload.get("prompt_eval_count"))
         output_tokens = _coerce_int(payload.get("eval_count"))
         token_source = "ollama_api"

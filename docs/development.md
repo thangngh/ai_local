@@ -14,6 +14,22 @@ Install the project:
 .\.venv\Scripts\python -m pip install -e .[dev]
 ```
 
+## Prerequisites
+
+- **ripgrep** (`rg` on PATH) for exact retrieval and full pytest. On Windows:
+
+```powershell
+winget install BurntSushi.ripgrep.MSVC
+```
+
+- **Ollama** (optional) for live benchmark runs with `--with-ollama`.
+
+Preflight checks:
+
+```powershell
+.\.venv\Scripts\python -m ai_local.cli doctor
+```
+
 ## Patch Gate Flow
 
 Every implementation patch starts with small gates. Only promote to the next level when the current level passes.

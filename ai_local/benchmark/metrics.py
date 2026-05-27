@@ -15,6 +15,8 @@ def build_aggregate(results: list[BenchmarkTaskResult]) -> BenchmarkAggregate:
         empty_scores = {key: 0.0 for key in ("task_success", "evidence_score", "retrieval_score", "memory_score", "safety_score", "tool_score", "patch_score", "performance_score")}
         return BenchmarkAggregate(
             system_score=0.0,
+            harness_system_score=0.0,
+            llm_system_score=None,
             tier=classify_system_tier(0.0),
             pass_count=0,
             partial_count=0,
@@ -42,6 +44,10 @@ def build_aggregate(results: list[BenchmarkTaskResult]) -> BenchmarkAggregate:
             dimension_totals[key] += scores[key]
     averaged = {key: round(value / len(results), 4) for key, value in dimension_totals.items()}
     system_score = compute_system_score(averaged)
+    harness_scores_avg = [result.harness_system_score for result in results]
+    harness_system_score = round(sum(harness_scores_avg) / len(harness_scores_avg), 4)
+    llm_values = [result.llm_system_score for result in results if result.llm_system_score is not None]
+    llm_system_score = round(sum(llm_values) / len(llm_values), 4) if llm_values else None
 
     pass_count = sum(1 for result in results if result.result == "pass")
     partial_count = sum(1 for result in results if result.result == "partial")
@@ -49,6 +55,8 @@ def build_aggregate(results: list[BenchmarkTaskResult]) -> BenchmarkAggregate:
 
     return BenchmarkAggregate(
         system_score=system_score,
+        harness_system_score=harness_system_score,
+        llm_system_score=llm_system_score,
         tier=classify_system_tier(system_score),
         pass_count=pass_count,
         partial_count=partial_count,

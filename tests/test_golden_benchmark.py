@@ -33,11 +33,15 @@ def test_run_golden_benchmark_produces_passing_report(tmp_path: Path) -> None:
     report = run_golden_benchmark(tasks_root=Path("golden_tasks"), benchmark_id="test_bench")
     assert report.aggregate.total >= 20
     assert report.aggregate.system_score >= 0.85
+    assert report.aggregate.harness_system_score >= 0.85
     assert report.aggregate.fail_count == 0
-    output = write_benchmark_report(report, tmp_path / "report.json")
+    assert all(task.harness_system_score >= 0.0 for task in report.tasks)
+    output = write_benchmark_report(report, tmp_path / "report.json", append_history=False)
     assert output.exists()
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["aggregate"]["tier"] == classify_system_tier(payload["aggregate"]["system_score"])
+    assert "harness_system_score" in payload["aggregate"]
+    assert "harness_scores" in payload["tasks"][0]
 
 
 def test_system_score_weights() -> None:

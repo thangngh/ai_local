@@ -7,9 +7,22 @@ from uuid import uuid4
 
 from ai_local.benchmark.cost import attach_task_token_usage, build_cost_aggregate
 from ai_local.benchmark.evaluators import EvaluationOutcome, evaluate_golden_task
+from ai_local.benchmark.history import append_benchmark_history
 from ai_local.benchmark.metrics import build_aggregate
-from ai_local.benchmark.models import BenchmarkRunReport, BenchmarkScores, BenchmarkTaskResult, GoldenTask
-from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig, blend_scores, run_ollama_for_task
+from ai_local.benchmark.summary import write_summary_markdown
+from ai_local.benchmark.models import (
+    BenchmarkResultLabel,
+    BenchmarkRunReport,
+    BenchmarkScores,
+    BenchmarkTaskResult,
+    GoldenTask,
+)
+from ai_local.benchmark.ollama_eval import (
+    OllamaBenchmarkConfig,
+    OllamaPromptConfig,
+    blend_scores,
+    run_ollama_for_task,
+)
 from ai_local.benchmark.rubric import compute_system_score
 from ai_local.config.loader import load_yaml
 from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
@@ -26,7 +39,7 @@ def discover_golden_tasks(tasks_root: Path) -> list[GoldenTask]:
     return tasks
 
 
-def _result_label(scores: BenchmarkScores, failures: list[str]) -> str:
+def _result_label(scores: BenchmarkScores, failures: list[str]) -> BenchmarkResultLabel:
     if scores.task_success >= 1.0 and not failures:
         return "pass"
     if scores.task_success >= 0.5 or any(score >= 0.5 for score in scores.as_dict().values()):
@@ -56,6 +69,7 @@ def run_golden_benchmark(
     benchmark_id: str = "local_ai_bench",
     run_id: str | None = None,
     ollama_config: OllamaBenchmarkConfig | None = None,
+    ollama_prompt_config: OllamaPromptConfig | None = None,
 ) -> BenchmarkRunReport:
     tasks = discover_golden_tasks(tasks_root)
     resolved_run_id = run_id or f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
@@ -76,9 +90,15 @@ def run_golden_benchmark(
 
     for task in tasks:
         harness_outcome = evaluate_golden_task(task)
+        llm_outcome: EvaluationOutcome | None = None
         outcome = harness_outcome
         if ollama_client is not None and ollama_config is not None:
-            llm_outcome = run_ollama_for_task(task, ollama_client, ollama_config=ollama_config)
+            llm_outcome = run_ollama_for_task(
+                task,
+                ollama_client,
+                ollama_config=ollama_config,
+                prompt_config=ollama_prompt_config,
+            )
             blended = blend_scores(
                 harness_outcome.scores,
                 llm_outcome.scores,
@@ -107,22 +127,34 @@ def run_golden_benchmark(
                 },
             )
 
-        scores = outcome.scores
+        harness_scores = harness_outcome.scores
+        llm_scores = llm_outcome.scores if llm_outcome is not None else None
+        blended_scores = outcome.scores
         failures = list(outcome.failed_criteria)
-        result_label = _result_label(scores, failures)
+        result_label = _result_label(blended_scores, failures)
         latency = outcome.debug_trace.get("latency_ms")
         if ollama_config is not None:
-            ollama_latency = outcome.debug_trace.get("ollama", {}).get("ollama_latency_ms")
-            if isinstance(ollama_latency, int):
-                latency = (latency or 0) + ollama_latency
+            ollama_block = outcome.debug_trace.get("ollama")
+            if isinstance(ollama_block, dict):
+                ollama_latency = ollama_block.get("ollama_latency_ms")
+                if isinstance(ollama_latency, int):
+                    latency = (latency or 0) + ollama_latency
+        harness_system_score = compute_system_score(harness_scores.as_dict())
+        llm_system_score = (
+            compute_system_score(llm_scores.as_dict()) if llm_scores is not None else None
+        )
         task_result = BenchmarkTaskResult(
             benchmark_id=benchmark_id,
             run_id=resolved_run_id,
             task_id=task.task_id,
             category=task.category,
             result=result_label,
-            scores=scores,
-            system_score=compute_system_score(scores.as_dict()),
+            harness_scores=harness_scores,
+            llm_scores=llm_scores,
+            scores=blended_scores,
+            system_score=compute_system_score(blended_scores.as_dict()),
+            harness_system_score=harness_system_score,
+            llm_system_score=llm_system_score,
             failures=failures,
             retrieved_refs=outcome.retrieved_refs,
             used_memories=outcome.used_memories,
@@ -147,7 +179,13 @@ def run_golden_benchmark(
     )
 
 
-def write_benchmark_report(report: BenchmarkRunReport, output: Path) -> Path:
+def write_benchmark_report(
+    report: BenchmarkRunReport,
+    output: Path,
+    *,
+    write_summary: bool = True,
+    append_history: bool = True,
+) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = report.model_dump(mode="json")
     output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -155,4 +193,8 @@ def write_benchmark_report(report: BenchmarkRunReport, output: Path) -> Path:
     with tasks_path.open("w", encoding="utf-8") as handle:
         for task in report.tasks:
             handle.write(json.dumps(task.model_dump(mode="json"), sort_keys=True) + "\n")
+    if write_summary:
+        write_summary_markdown(report, output.parent / f"{report.run_id}_summary.md")
+    if append_history:
+        append_benchmark_history(report, output.parent / "history.jsonl")
     return output
