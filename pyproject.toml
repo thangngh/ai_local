@@ -3,6 +3,7 @@ name = "ai-local"
 version = "0.1.0"
 description = "Local AI infrastructure built with Python and FastAPI"
 requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
