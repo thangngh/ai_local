@@ -1,6 +1,14 @@
-# AI Infrastructure Project
+# AI Local
 
-Local AI infrastructure project built with Python and FastAPI.
+Local-first AI agent infrastructure built with Python and FastAPI.
+
+AI Local is an MVP foundation for controlled, testable, evidence-driven local AI workflows. It is not a chatbot wrapper and it does not claim to be production-ready. The project focuses on agent orchestration, local retrieval, memory boundaries, queueing, tool policy, evaluation gates, and auditability.
+
+## Status
+
+Current status: **MVP foundation**.
+
+The repository is suitable for research, local experimentation, architecture review, and incremental hardening. It is not yet a secure production agent runtime. The current subprocess sandbox is an adapter boundary for MVP execution; stronger isolation such as Docker or bubblewrap is planned.
 
 ## Scope
 
@@ -26,12 +34,45 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - Worker: Python asyncio, process pool when needed
 - Tool runner: subprocess with timeout and allowlist
 - Tool sandbox: adapter boundary for subprocess now, Docker/bubblewrap later
-- Retrieval: ripgrep subprocess, SQLite FTS5, sqlite-vec, tree-sitter
+- Retrieval: ripgrep subprocess, SQLite FTS5, sqlite-vec-ready architecture, tree-sitter-ready indexing
 - Config: YAML plus Pydantic Settings
 - CLI: Typer
 - Runtime control panel: deterministic TUI-ready terminal snapshot
 - Fast phase gate: aggregate Phase 1 through current Phase 10 harness check
 - Testing and quality: pytest, ruff, mypy
+
+## Local-First Positioning
+
+Local-first means the project keeps workflow state, retrieval, memory, gates, and audit trails close to the developer machine by default.
+
+It does **not** mean local-only. Cloud or external model providers can still be useful for frontier reasoning, but AI Local treats them as optional integrations rather than the control plane.
+
+## Development Rule
+
+Development is requirements-first:
+
+1. Fetch requirement sources from [AI Infranstructure](https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e) and its configured sub pages.
+2. Normalize into acceptance criteria.
+3. Generate and review the harness test.
+4. Implement only after the harness is accepted.
+5. Run the harness, evaluate evidence, and pass the decision gate.
+
+Machine-readable registries:
+
+- [configs/skills.yaml](configs/skills.yaml)
+- [configs/tools.yaml](configs/tools.yaml)
+
+## Public Contribution Policy
+
+Contributions are welcome when they preserve the project direction:
+
+- local-first by default
+- harness-first before implementation
+- evidence-backed changes
+- explicit runtime boundaries
+- no exaggerated production or security claims
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Documents
 
@@ -138,17 +179,6 @@ This repository defines an MVP foundation for a local AI agent runtime:
 - [Phase 11 Sprint 03 Progress](docs/phase-11-sprint-03-progress.md)
 - [Phase 11 Sprint 04 Progress](docs/phase-11-sprint-04-progress.md)
 
-## Development Rule
+## License
 
-Development is requirements-first:
-
-1. Fetch requirement sources from [AI Infranstructure](https://www.notion.so/AI-Infranstructure-32db38678ea58058a66af365862c301e) and its configured sub pages.
-2. Normalize into acceptance criteria.
-3. Generate and review the harness test.
-4. Implement only after the harness is accepted.
-5. Run the harness, evaluate evidence, and pass the decision gate.
-
-Machine-readable registries:
-
-- [configs/skills.yaml](configs/skills.yaml)
-- [configs/tools.yaml](configs/tools.yaml)
+AI Local is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
