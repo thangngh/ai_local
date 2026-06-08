@@ -1,0 +1,87 @@
+{
+  "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-demo",
+  "created_at": "2026-06-08T09:39:52.583136+00:00",
+  "status": "pass",
+  "steps": [
+    {
+      "name": "init",
+      "status": "pass"
+    },
+    {
+      "name": "knowledge_add",
+      "status": "pass",
+      "knowledge_id": 5,
+      "mode": "reused"
+    },
+    {
+      "name": "knowledge_search",
+      "status": "pass",
+      "matches": 5,
+      "demo_matches": 1
+    },
+    {
+      "name": "ask",
+      "status": "pass",
+      "decision": "enough_context",
+      "report_path": ".tmp-demo\\.ai-local\\reports\\ask-1780911592.json"
+    },
+    {
+      "name": "task_submit",
+      "status": "pass",
+      "task_id": "task-22"
+    },
+    {
+      "name": "worker_once",
+      "status": "pass",
+      "processed": 1
+    },
+    {
+      "name": "runtime_snapshot",
+      "status": "pass",
+      "report_path": "inline"
+    }
+  ],
+  "artifacts": {
+    "ask_report": ".tmp-demo\\.ai-local\\reports\\ask-1780911592.json",
+    "runtime_snapshot": {
+      "health": "ok",
+      "queue_counts": {
+        "pending": 0,
+        "claimed": 0,
+        "running": 0,
+        "succeeded": 22,
+        "failed": 0,
+        "dead_letter": 0,
+        "cancelled": 0
+      },
+      "agent_run_counts": {
+        "pending": 0,
+        "planned": 0,
+        "waiting_user": 0,
+        "stopped": 0,
+        "running": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "cancelled": 0
+      },
+      "audit_event_count": 0,
+      "schema_versions": {
+        "agent_runs": 1,
+        "queue": 1,
+        "audit": 1
+      },
+      "recent_audit_events": [],
+      "issues": [],
+      "daemon_status": "stopped",
+      "daemon_pid": 24628,
+      "daemon_last_seen_at": "2026-06-08T08:33:05.714343Z",
+      "daemon_iterations": 3
+    },
+    "demo_report": ".tmp-demo\\.ai-local\\reports\\demo-basic.json"
+  },
+  "limitations": [
+    "local deterministic demo only",
+    "no cloud model call",
+    "not a production service workflow"
+  ]
+}

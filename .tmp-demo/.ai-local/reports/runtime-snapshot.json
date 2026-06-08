@@ -1,0 +1,18 @@
+{
+  "tasks_total": 23,
+  "tasks_pending": 0,
+  "tasks_done": 23,
+  "tasks_cancelled": 0,
+  "last_worker_result": {
+    "status": "skipped",
+    "processed": 0,
+    "reason": "no pending job"
+  },
+  "logs_dir": ".tmp-demo\\.ai-local\\logs",
+  "reports_dir": ".tmp-demo\\.ai-local\\reports",
+  "daemon_status": "stopped",
+  "daemon_pid": 22352,
+  "daemon_last_seen_at": "2026-06-08T09:53:32.571688+00:00",
+  "daemon_iterations": 3,
+  "daemon_stop_reason": "max_iterations"
+}
