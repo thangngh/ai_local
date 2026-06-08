@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -25,6 +26,8 @@ _RUN_STATUSES = (
     "cancelled",
 )
 
+DAEMON_STALE_AFTER_SECONDS = 60
+
 
 @dataclass(frozen=True)
 class RuntimeControlIssue:
@@ -47,6 +50,37 @@ class RuntimeControlSnapshot:
     daemon_last_seen_at: str | None = None
     daemon_iterations: int | None = None
     daemon_stop_reason: str | None = None
+    daemon_stale: bool | None = None
+    daemon_stale_after_seconds: int = DAEMON_STALE_AFTER_SECONDS
+    logs_dir: str = ""
+    reports_dir: str = ""
+
+
+def _total_tasks(counts: dict[str, int]) -> int:
+    return (
+        counts.get("pending", 0)
+        + counts.get("running", 0)
+        + counts.get("succeeded", 0)
+        + counts.get("failed", 0)
+        + counts.get("cancelled", 0)
+        + counts.get("dead_letter", 0)
+    )
+
+
+def _is_daemon_stale(
+    daemon_status: str | None,
+    daemon_last_seen_at: str | None,
+    threshold_seconds: int = DAEMON_STALE_AFTER_SECONDS,
+) -> bool | None:
+    """Check if a running daemon's heartbeat is older than *threshold_seconds*."""
+    if daemon_status != "running" or daemon_last_seen_at is None:
+        return None
+    try:
+        last_seen = datetime.fromisoformat(daemon_last_seen_at)
+        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+        return age > threshold_seconds
+    except (ValueError, TypeError):
+        return None
 
 
 def build_runtime_control_snapshot(
@@ -72,6 +106,12 @@ def build_runtime_control_snapshot(
         run_counts=run_counts,
         schema_versions=schema_versions,
     )
+
+    # Paths
+    base = Path(tasks_db).parent
+    logs_dir = str(base / "logs")
+    reports_dir = str(base / "reports")
+
     # Load daemon heartbeat if present
     heartbeat_path = Path(tasks_db).parent / "reports" / "daemon-heartbeat.json"
     daemon_status = daemon_pid = daemon_last_seen_at = daemon_iterations = daemon_stop_reason = None
@@ -85,6 +125,8 @@ def build_runtime_control_snapshot(
             daemon_stop_reason = hb.get("stop_reason")
         except Exception:
             pass
+    daemon_stale = _is_daemon_stale(daemon_status, daemon_last_seen_at)
+
     return RuntimeControlSnapshot(
         health=_health_from_issues(issues),
         queue_counts=queue_counts,
@@ -98,42 +140,42 @@ def build_runtime_control_snapshot(
         daemon_last_seen_at=daemon_last_seen_at,
         daemon_iterations=daemon_iterations,
         daemon_stop_reason=daemon_stop_reason,
+        daemon_stale=daemon_stale,
+        daemon_stale_after_seconds=DAEMON_STALE_AFTER_SECONDS,
+        logs_dir=logs_dir,
+        reports_dir=reports_dir,
     )
 
 
 def render_runtime_control_snapshot(snapshot: RuntimeControlSnapshot) -> str:
+    q = snapshot.queue_counts
     lines = [
-        f"RUNTIME_CONTROL health={snapshot.health}",
-        "QUEUE " + _format_counts(snapshot.queue_counts),
-        "AGENT_RUNS " + _format_counts(snapshot.agent_run_counts),
-        f"AUDIT events={snapshot.audit_event_count}",
-        "SCHEMA " + _format_schema_versions(snapshot.schema_versions),
+        f"RUNTIME status={snapshot.health}",
+        "TASKS "
+        f"total={_total_tasks(q)} "
+        f"pending={q.get('pending', 0)} "
+        f"done={q.get('succeeded', 0)} "
+        f"cancelled={q.get('cancelled', 0)}",
+        "WORKER last_status=none processed=0 job_id=none",
     ]
-    if snapshot.recent_audit_events:
-        lines.append("RECENT_AUDIT")
-        for event in snapshot.recent_audit_events:
-            lines.append(
-                f"- {event.created_at} action={event.action} "
-                f"target={event.target} result={event.result}"
-            )
-    if snapshot.issues:
-        lines.append("ISSUES")
-        for issue in snapshot.issues:
-            lines.append(f"- {issue.severity} {issue.code}: {issue.message}")
-    else:
-        lines.append("ISSUES none")
-    # Daemon heartbeat fields
+
     if snapshot.daemon_status is not None:
-        parts = [f"DAEMON status={snapshot.daemon_status}"]
+        stale_str = "true" if snapshot.daemon_stale else "false" if snapshot.daemon_stale is not None else "none"
+        parts = [
+            f"DAEMON status={snapshot.daemon_status}",
+            f"stale={stale_str}",
+        ]
         if snapshot.daemon_pid is not None:
             parts.append(f"pid={snapshot.daemon_pid}")
-        if snapshot.daemon_last_seen_at is not None:
-            parts.append(f"last_seen_at={snapshot.daemon_last_seen_at}")
         if snapshot.daemon_iterations is not None:
             parts.append(f"iterations={snapshot.daemon_iterations}")
         if snapshot.daemon_stop_reason is not None:
             parts.append(f"stop_reason={snapshot.daemon_stop_reason}")
         lines.append(" ".join(parts))
+    else:
+        lines.append("DAEMON status=none stale=none pid=none iterations=none stop_reason=none")
+
+    lines.append(f"PATHS logs_dir={snapshot.logs_dir} reports_dir={snapshot.reports_dir}")
     return "\n".join(lines)
 
 
