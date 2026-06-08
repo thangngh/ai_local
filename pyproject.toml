@@ -39,3 +39,6 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = ["ai_local*"]
+
+[project.scripts]
+ai-local = "ai_local.cli.app:app"

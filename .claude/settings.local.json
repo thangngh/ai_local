@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_demo_cli.py tests/test_worker_daemon_runtime.py -q)",
+      "Bash(cd *)"
+    ]
+  }
+}

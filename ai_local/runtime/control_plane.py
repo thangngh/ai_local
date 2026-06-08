@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -41,6 +42,11 @@ class RuntimeControlSnapshot:
     schema_versions: dict[str, int]
     recent_audit_events: list[AuditEvent] = field(default_factory=list)
     issues: list[RuntimeControlIssue] = field(default_factory=list)
+    daemon_status: str | None = None
+    daemon_pid: int | None = None
+    daemon_last_seen_at: str | None = None
+    daemon_iterations: int | None = None
+    daemon_stop_reason: str | None = None
 
 
 def build_runtime_control_snapshot(
@@ -66,6 +72,19 @@ def build_runtime_control_snapshot(
         run_counts=run_counts,
         schema_versions=schema_versions,
     )
+    # Load daemon heartbeat if present
+    heartbeat_path = Path(tasks_db).parent / "reports" / "daemon-heartbeat.json"
+    daemon_status = daemon_pid = daemon_last_seen_at = daemon_iterations = daemon_stop_reason = None
+    if heartbeat_path.exists():
+        try:
+            hb = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+            daemon_status = hb.get("status")
+            daemon_pid = hb.get("pid")
+            daemon_last_seen_at = hb.get("last_seen_at")
+            daemon_iterations = hb.get("iterations")
+            daemon_stop_reason = hb.get("stop_reason")
+        except Exception:
+            pass
     return RuntimeControlSnapshot(
         health=_health_from_issues(issues),
         queue_counts=queue_counts,
@@ -74,6 +93,11 @@ def build_runtime_control_snapshot(
         schema_versions=schema_versions,
         recent_audit_events=audit_events[-recent_audit_limit:] if recent_audit_limit > 0 else [],
         issues=issues,
+        daemon_status=daemon_status,
+        daemon_pid=daemon_pid,
+        daemon_last_seen_at=daemon_last_seen_at,
+        daemon_iterations=daemon_iterations,
+        daemon_stop_reason=daemon_stop_reason,
     )
 
 
@@ -98,6 +122,18 @@ def render_runtime_control_snapshot(snapshot: RuntimeControlSnapshot) -> str:
             lines.append(f"- {issue.severity} {issue.code}: {issue.message}")
     else:
         lines.append("ISSUES none")
+    # Daemon heartbeat fields
+    if snapshot.daemon_status is not None:
+        parts = [f"DAEMON status={snapshot.daemon_status}"]
+        if snapshot.daemon_pid is not None:
+            parts.append(f"pid={snapshot.daemon_pid}")
+        if snapshot.daemon_last_seen_at is not None:
+            parts.append(f"last_seen_at={snapshot.daemon_last_seen_at}")
+        if snapshot.daemon_iterations is not None:
+            parts.append(f"iterations={snapshot.daemon_iterations}")
+        if snapshot.daemon_stop_reason is not None:
+            parts.append(f"stop_reason={snapshot.daemon_stop_reason}")
+        lines.append(" ".join(parts))
     return "\n".join(lines)
 
 

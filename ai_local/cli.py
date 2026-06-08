@@ -1,100 +1,12 @@
 import json
 from pathlib import Path
-
 import typer
+from enum import Enum
+class Phase9ReportScenario(str, Enum):
+    ready = "ready"
 
-from ai_local.harness.test_gate import run_patch_gate, run_promoted_gates
-from ai_local.harness.noise_gate import run_noise_promotion
-from ai_local.harness.memory_regression_gate import run_memory_regression_promotion
-from ai_local.harness.memory_layer_gate import run_memory_layer_promotion
-from ai_local.harness.composite_gate import run_composite_promotion
-from ai_local.harness.decision_gate import run_decision_promotion
-from ai_local.harness.retrieval_gate import run_retrieval_promotion
-from ai_local.harness.agent_loop_gate import run_agent_loop_promotion
-from ai_local.harness.big_harness import load_big_harness_policy, validate_big_harness_policy
-from ai_local.harness.small_patch_harness import run_small_patch_policy_check
-from ai_local.harness.patch_pipeline_harness import run_patch_pipeline_promotion
-from ai_local.harness.patch_levels import load_patch_levels, validate_patch_levels
-from ai_local.harness.evaluation_gate import run_evaluation_promotion
-from ai_local.harness.confirmation_gate import run_confirmation_promotion
-from ai_local.harness.knowledge_gate import run_knowledge_promotion
-from ai_local.harness.evidence_rank_gate import run_evidence_rank_promotion
-from ai_local.harness.tool_combo_gate import run_tool_combo_promotion
-from ai_local.harness.skill_gate import run_skill_promotion
-from ai_local.harness.memory_sql_gate import run_memory_sql_promotion
-from ai_local.harness.conflict_path_gate import run_conflict_path_promotion
-from ai_local.harness.multi_instance_conflict_gate import (
-    run_multi_instance_conflict_promotion,
-)
-from ai_local.harness.request_lifecycle_gate import run_request_lifecycle_promotion
-from ai_local.harness.prompt_injection_refusal_gate import (
-    run_prompt_injection_refusal_promotion,
-)
-from ai_local.harness.thread_control_gate import run_thread_control_promotion
-from ai_local.harness.operational_safety_gate import run_operational_safety_promotion
-from ai_local.harness.memory_governance_gate import run_memory_governance_promotion
-from ai_local.harness.flow_memory_rating_gate import run_flow_memory_rating_promotion
-from ai_local.harness.global_developer_harness import run_global_developer_harness
-from ai_local.harness.developer_sprint_harness import run_developer_sprint_harness
-from ai_local.doctor import run_doctor
-from ai_local.benchmark.history import load_benchmark_history, render_trend_table
-from ai_local.benchmark.ollama_eval import OllamaBenchmarkConfig, load_ollama_prompt_config
-from ai_local.benchmark.replay import load_benchmark_report, render_replay_report
-from ai_local.benchmark.dashboard import write_benchmark_dashboard
-from ai_local.benchmark.overall_summary import write_overall_summary
-from ai_local.benchmark.regression import enforce_regression_gate, load_regression_policy
-from ai_local.benchmark.runner import (
-    benchmark_task_pack,
-    load_ollama_benchmark_config,
-    run_golden_benchmark,
-    write_benchmark_report,
-)
-from ai_local.benchmark.summary import render_summary_table
-from ai_local.benchmark.thresholds import enforce_thresholds, load_benchmark_thresholds
-from ai_local.llm.ollama import OllamaClient, OllamaConfig, OllamaError
-from ai_local.harness.phase_fast_gate import run_phase_fast_gates, write_phase_fast_gate_report
-from ai_local.indexer.project import (
-    rebuild_project_index,
-    refresh_and_retrieve_project,
-    refresh_project_index,
-)
-from ai_local.indexer.sqlite_store import KnowledgeIndexStore
-from ai_local.agent.operations import (
-    cancel_agent_run,
-    list_agent_runs,
-    stop_agent_run,
-)
-from ai_local.agent.store import SQLiteAgentRunStore
-from ai_local.audit.store import SQLiteAuditStore
-from ai_local.pipeline.audit_chain import PipelineAuditChainStore
-from ai_local.pipeline.phase9_close import run_phase9_close
-from ai_local.pipeline.report import Phase9ReportScenario, run_phase9_integration_report
-from ai_local.pipeline.replay import run_phase9_replay_fixtures
-from ai_local.pipeline.stress import run_phase9_stress_cases
-from ai_local.queue.store import SQLiteQueueStore
-from ai_local.queue.operations import (
-    cancel_queue_job,
-    list_queue_jobs,
-    retry_dead_letter_job,
-)
-from ai_local.runtime.control_plane import (
-    build_runtime_control_snapshot,
-    render_runtime_control_snapshot,
-)
-from ai_local.runtime.tui import run_runtime_tui_frames
-from ai_local.runtime.backup import create_runtime_backup, restore_runtime_backup
-from ai_local.skills.store import (
-    InstalledSkillStore,
-    cleanup_stale_installed_skills,
-    rebuild_installed_skill_registry,
-    refresh_installed_skill_registry,
-)
-from ai_local.tools.sandbox import (
-    SandboxPolicy,
-    SandboxRunRequest,
-    SubprocessSandboxAdapter,
-)
-
+# Lazy imports inside commands to avoid heavy dependencies at module load time
+# Example: from ai_local.harness.test_gate import run_patch_gate
 app = typer.Typer()
 
 
