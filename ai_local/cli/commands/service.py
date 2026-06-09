@@ -9,6 +9,9 @@ service_app = typer.Typer()
 SERVICE_ID = "ai-local-agent-runtime"
 SERVICE_DISPLAY_NAME = "AI Local Agent Runtime"
 
+PYWIN32_SERVICE_ID = "ai-local-agent-runtime-pywin32"
+PYWIN32_SERVICE_DISPLAY_NAME = "AI Local Agent Runtime (pywin32)"
+
 
 def _workspace_dir(workspace: Path) -> Path:
     return workspace / ".ai-local"
@@ -34,6 +37,9 @@ def _ensure_workspace(workspace: Path) -> dict[str, Path]:
     }
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
 def _load_nssm_or_fail() -> None:
     """Check that NSSM is available; exit with error if not."""
     try:
@@ -55,11 +61,45 @@ def _check_windows() -> None:
         raise typer.Exit(code=1)
 
 
+def _check_pywin32() -> None:
+    """Exit with error if pywin32 is not available."""
+    from ai_local.runtime.pywin32_service import pywin32_available
+
+    if not pywin32_available():
+        typer.echo(
+            "SERVICE install FAIL reason=\"pywin32 not found. "
+            'Install with: python -m pip install pywin32"'
+        )
+        typer.echo("HINT install pywin32 with: python -m pip install pywin32")
+        raise typer.Exit(code=1)
+
+
+def _is_pywin32(strategy: str) -> bool:
+    return strategy == "pywin32"
+
+
+def _resolve_workspace(workspace: Path) -> Path:
+    """Return resolved absolute workspace path, creating .ai-local dirs."""
+    _ensure_workspace(workspace)
+    return workspace.resolve()
+
+
+# ── Install ───────────────────────────────────────────────────────────────────
+
+
 @service_app.command("install")
 def service_install_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+    strategy: str = typer.Option("nssm", "--strategy"),
 ) -> None:
+    if _is_pywin32(strategy):
+        _pywin32_install(dry_run, workspace)
+    else:
+        _nssm_install(dry_run, workspace)
+
+
+def _nssm_install(dry_run: bool, workspace: Path) -> None:
     if dry_run:
         _ensure_workspace(workspace)
         typer.echo("SERVICE install dry-run")
@@ -91,11 +131,54 @@ def service_install_group(
         raise typer.Exit(code=1) from exc
 
 
+def _pywin32_install(dry_run: bool, workspace: Path) -> None:
+    abs_ws = _resolve_workspace(workspace)
+
+    if dry_run:
+        typer.echo("SERVICE install dry-run")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo(
+            f"COMMAND python -m ai_local.runtime.pywin32_service "
+            f"install --workspace {abs_ws}"
+        )
+        typer.echo("NOTE dry-run only; no Windows service was created")
+        return
+
+    _check_windows()
+    _check_pywin32()
+
+    try:
+        from ai_local.runtime.pywin32_service import install_pywin32_service
+
+        install_pywin32_service(abs_ws, startup="manual")
+        typer.echo("SERVICE install PASS")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo(f"WORKSPACE {abs_ws}")
+    except RuntimeError as exc:
+        typer.echo(f"SERVICE install FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+
+
+# ── Uninstall ─────────────────────────────────────────────────────────────────
+
+
 @service_app.command("uninstall")
 def service_uninstall_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+    strategy: str = typer.Option("nssm", "--strategy"),
 ) -> None:
+    if _is_pywin32(strategy):
+        _pywin32_uninstall(dry_run)
+    else:
+        _nssm_uninstall(dry_run, workspace)
+
+
+def _nssm_uninstall(dry_run: bool, workspace: Path) -> None:
     if dry_run:
         typer.echo("SERVICE uninstall dry-run")
         typer.echo("NAME AI Local Agent Runtime")
@@ -118,11 +201,51 @@ def service_uninstall_group(
         raise typer.Exit(code=1) from exc
 
 
+def _pywin32_uninstall(dry_run: bool) -> None:
+    if dry_run:
+        typer.echo("SERVICE uninstall dry-run")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo(
+            "COMMAND python -m ai_local.runtime.pywin32_service remove"
+        )
+        typer.echo("NOTE dry-run only; no Windows service was removed")
+        return
+
+    _check_windows()
+    _check_pywin32()
+
+    try:
+        from ai_local.runtime.pywin32_service import remove_pywin32_service
+
+        remove_pywin32_service()
+        typer.echo("SERVICE uninstall PASS")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo("NOTE workspace data was not removed")
+    except RuntimeError as exc:
+        typer.echo(f"SERVICE uninstall FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+
+
+# ── Start ─────────────────────────────────────────────────────────────────────
+
+
 @service_app.command("start")
 def service_start_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+    strategy: str = typer.Option("nssm", "--strategy"),
 ) -> None:
+    if _is_pywin32(strategy):
+        _pywin32_start(dry_run)
+    else:
+        _nssm_start(dry_run, workspace)
+
+
+def _nssm_start(dry_run: bool, workspace: Path) -> None:
     if dry_run:
         typer.echo("SERVICE start dry-run")
         typer.echo("NAME AI Local Agent Runtime")
@@ -145,11 +268,48 @@ def service_start_group(
         raise typer.Exit(code=1) from exc
 
 
+def _pywin32_start(dry_run: bool) -> None:
+    if dry_run:
+        typer.echo("SERVICE start dry-run")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo("COMMAND python -m ai_local.runtime.pywin32_service start")
+        typer.echo("NOTE dry-run only; no Windows service was started")
+        return
+
+    _check_windows()
+    _check_pywin32()
+
+    try:
+        from ai_local.runtime.pywin32_service import start_pywin32_service
+
+        start_pywin32_service()
+        typer.echo("SERVICE start PASS")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+    except RuntimeError as exc:
+        typer.echo(f"SERVICE start FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+
+
+# ── Stop ──────────────────────────────────────────────────────────────────────
+
+
 @service_app.command("stop")
 def service_stop_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+    strategy: str = typer.Option("nssm", "--strategy"),
 ) -> None:
+    if _is_pywin32(strategy):
+        _pywin32_stop(dry_run)
+    else:
+        _nssm_stop(dry_run, workspace)
+
+
+def _nssm_stop(dry_run: bool, workspace: Path) -> None:
     if dry_run:
         typer.echo("SERVICE stop dry-run")
         typer.echo("NAME AI Local Agent Runtime")
@@ -171,11 +331,48 @@ def service_stop_group(
         raise typer.Exit(code=1) from exc
 
 
+def _pywin32_stop(dry_run: bool) -> None:
+    if dry_run:
+        typer.echo("SERVICE stop dry-run")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo("COMMAND python -m ai_local.runtime.pywin32_service stop")
+        typer.echo("NOTE dry-run only; no Windows service was stopped")
+        return
+
+    _check_windows()
+    _check_pywin32()
+
+    try:
+        from ai_local.runtime.pywin32_service import stop_pywin32_service
+
+        stop_pywin32_service()
+        typer.echo("SERVICE stop PASS")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+    except RuntimeError as exc:
+        typer.echo(f"SERVICE stop FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+
+
+# ── Status ────────────────────────────────────────────────────────────────────
+
+
 @service_app.command("status")
 def service_status_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+    strategy: str = typer.Option("nssm", "--strategy"),
 ) -> None:
+    if _is_pywin32(strategy):
+        _pywin32_status(dry_run)
+    else:
+        _nssm_status(dry_run, workspace)
+
+
+def _nssm_status(dry_run: bool, workspace: Path) -> None:
     if dry_run:
         typer.echo("SERVICE status dry-run")
         typer.echo("NAME AI Local Agent Runtime")
@@ -196,6 +393,35 @@ def service_status_group(
     except RuntimeError as exc:
         typer.echo(f"SERVICE status FAIL reason=\"{exc}\"")
         raise typer.Exit(code=1) from exc
+
+
+def _pywin32_status(dry_run: bool) -> None:
+    if dry_run:
+        typer.echo("SERVICE status dry-run")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo("NOTE dry-run only; no Windows service was queried")
+        return
+
+    _check_windows()
+    _check_pywin32()
+
+    try:
+        from ai_local.runtime.pywin32_service import status_pywin32_service
+
+        state = status_pywin32_service()
+        typer.echo("SERVICE status")
+        typer.echo("STRATEGY pywin32")
+        typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
+        typer.echo(f"ID {PYWIN32_SERVICE_ID}")
+        typer.echo(f"STATE {state}")
+    except RuntimeError as exc:
+        typer.echo(f"SERVICE status FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+
+
+# ── Logs (cross-platform, shared) ─────────────────────────────────────────────
 
 
 @service_app.command("logs")

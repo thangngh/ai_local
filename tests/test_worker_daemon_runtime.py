@@ -4,6 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from ai_local.cli import app
@@ -812,6 +813,21 @@ def test_status_script_exists() -> None:
     assert Path("scripts/windows-service/show-backend-service-status.ps1").is_file()
 
 
+def test_pywin32_install_script_exists() -> None:
+    """install-pywin32-service.ps1 script exists."""
+    assert Path("scripts/windows-service/install-pywin32-service.ps1").is_file()
+
+
+def test_pywin32_uninstall_script_exists() -> None:
+    """uninstall-pywin32-service.ps1 script exists."""
+    assert Path("scripts/windows-service/uninstall-pywin32-service.ps1").is_file()
+
+
+def test_pywin32_status_script_exists() -> None:
+    """show-pywin32-service-status.ps1 script exists."""
+    assert Path("scripts/windows-service/show-pywin32-service-status.ps1").is_file()
+
+
 def test_no_auto_download_in_scripts() -> None:
     """No script contains an auto-download URL."""
     script_dir = Path("scripts/windows-service")
@@ -854,6 +870,30 @@ def test_restart_script_has_dry_run_flag() -> None:
     assert "[switch]$DryRun" in content
 
 
+def test_pywin32_install_script_has_dry_run_flag() -> None:
+    """install-pywin32-service.ps1 has -DryRun switch."""
+    content = Path(
+        "scripts/windows-service/install-pywin32-service.ps1"
+    ).read_text(encoding="utf-8")
+    assert "[switch]$DryRun" in content
+
+
+def test_pywin32_uninstall_script_has_dry_run_flag() -> None:
+    """uninstall-pywin32-service.ps1 has -DryRun switch."""
+    content = Path(
+        "scripts/windows-service/uninstall-pywin32-service.ps1"
+    ).read_text(encoding="utf-8")
+    assert "[switch]$DryRun" in content
+
+
+def test_pywin32_status_script_has_dry_run_flag() -> None:
+    """show-pywin32-service-status.ps1 has -DryRun switch."""
+    content = Path(
+        "scripts/windows-service/show-pywin32-service-status.ps1"
+    ).read_text(encoding="utf-8")
+    assert "[switch]$DryRun" in content
+
+
 def test_docs_contain_key_commands() -> None:
     """Documentation lists required validation commands."""
     doc_path = Path("docs/demo/phase-5c-windows-service-smoke.md")
@@ -873,3 +913,247 @@ def test_docs_no_production_claim() -> None:
     # Either "production-grade" is not present, or it says "not intended for production"
     if "production-grade" in content:
         assert "not intended for production" in content
+
+
+# ── Phase 6A — pywin32 Windows Service strategy ────────────────────────────
+
+
+def test_pywin32_available_returns_false_without_pywin32(monkeypatch) -> None:
+    """pywin32_available() returns False when pywin32 is not installed."""
+    from ai_local.runtime.pywin32_service import pywin32_available
+
+    # No monkeypatch needed — pywin32 isn't installed in this environment
+    assert pywin32_available() is False
+
+
+def test_require_pywin32_raises_without_pywin32() -> None:
+    """require_pywin32() raises RuntimeError when pywin32 is not installed."""
+    from ai_local.runtime.pywin32_service import require_pywin32
+
+    with pytest.raises(RuntimeError, match="pywin32 not found"):
+        require_pywin32()
+
+
+def test_pywin32_lazy_imports_non_windows() -> None:
+    """pywin32_service module can be imported on non-Windows without error."""
+    # Just importing should work — no pywin32 imports at module level
+    from ai_local.runtime import pywin32_service  # noqa: F811
+
+    assert pywin32_service.SERVICE_ID == "ai-local-agent-runtime-pywin32"
+    assert pywin32_service.pywin32_available() is False
+
+
+def test_pywin32_write_config(tmp_path: Path) -> None:
+    """write_config writes JSON with absolute workspace path and service_id."""
+    from ai_local.runtime.pywin32_service import write_config, read_config, SERVICE_ID
+
+    cfg = write_config(tmp_path, poll_interval=0.5)
+    assert cfg["workspace"] == str(tmp_path.resolve())
+    assert cfg["poll_interval"] == 0.5
+    assert cfg["service_id"] == SERVICE_ID
+
+    # Verify file on disk
+    read = read_config(tmp_path)
+    assert read == cfg
+
+
+def test_pywin32_read_config_missing(tmp_path: Path) -> None:
+    """read_config returns None when no config exists."""
+    from ai_local.runtime.pywin32_service import read_config
+
+    assert read_config(tmp_path) is None
+
+
+def test_pywin32_install_dry_run_exact(tmp_path: Path) -> None:
+    """service install --dry-run --strategy pywin32 prints pywin32 contract."""
+    runner = CliRunner()
+    from ai_local.cli.commands.service import _ensure_workspace
+
+    _ensure_workspace(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "service", "install",
+            "--dry-run",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE install dry-run" in result.output
+    assert "STRATEGY pywin32" in result.output
+    assert "AI Local Agent Runtime (pywin32)" in result.output
+    assert "ai-local-agent-runtime-pywin32" in result.output
+    assert "COMMAND" in result.output
+    assert "NOTE dry-run only" in result.output
+
+
+def test_pywin32_uninstall_dry_run_exact(tmp_path: Path) -> None:
+    """service uninstall --dry-run --strategy pywin32 prints expected output."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "service", "uninstall",
+            "--dry-run",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE uninstall dry-run" in result.output
+    assert "STRATEGY pywin32" in result.output
+    assert "ai-local-agent-runtime-pywin32" in result.output
+    assert "COMMAND python -m ai_local.runtime.pywin32_service remove" in result.output
+    assert "NOTE dry-run only" in result.output
+
+
+def test_pywin32_start_dry_run_exact(tmp_path: Path) -> None:
+    """service start --dry-run --strategy pywin32 prints expected output."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "service", "start",
+            "--dry-run",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE start dry-run" in result.output
+    assert "STRATEGY pywin32" in result.output
+    assert "COMMAND python -m ai_local.runtime.pywin32_service start" in result.output
+    assert "NOTE dry-run only; no Windows service was started" in result.output
+
+
+def test_pywin32_stop_dry_run_exact(tmp_path: Path) -> None:
+    """service stop --dry-run --strategy pywin32 prints expected output."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "service", "stop",
+            "--dry-run",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE stop dry-run" in result.output
+    assert "STRATEGY pywin32" in result.output
+    assert "COMMAND python -m ai_local.runtime.pywin32_service stop" in result.output
+    assert "NOTE dry-run only; no Windows service was stopped" in result.output
+
+
+def test_pywin32_status_dry_run_exact(tmp_path: Path) -> None:
+    """service status --dry-run --strategy pywin32 prints expected output."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "service", "status",
+            "--dry-run",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE status dry-run" in result.output
+    assert "STRATEGY pywin32" in result.output
+    assert "NOTE dry-run only; no Windows service was queried" in result.output
+
+
+def test_pywin32_real_install_non_windows_fails(monkeypatch, tmp_path: Path) -> None:
+    """Real pywin32 install on non-Windows fails with 'Windows only'."""
+    monkeypatch.setattr("ai_local.runtime.pywin32_service._is_windows", lambda: False)
+    monkeypatch.setattr("ai_local.runtime.pywin32_service.pywin32_available", lambda: True)
+
+    runner = CliRunner()
+    from ai_local.cli.commands.service import _ensure_workspace
+
+    _ensure_workspace(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "service", "install",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code != 0, result.output
+    assert "Windows only" in result.output or "FAIL" in result.output
+
+
+def test_pywin32_real_install_missing_pywin32_fails(monkeypatch, tmp_path: Path) -> None:
+    """Real pywin32 install on Windows but missing pywin32 fails clearly."""
+    monkeypatch.setattr("ai_local.runtime.pywin32_service._is_windows", lambda: True)
+    monkeypatch.setattr("ai_local.runtime.pywin32_service.pywin32_available", lambda: False)
+
+    runner = CliRunner()
+    from ai_local.cli.commands.service import _ensure_workspace
+
+    _ensure_workspace(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "service", "install",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code != 0, result.output
+    assert "pywin32 not found" in result.output
+
+
+def test_pywin32_real_install_uninitialized_workspace_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Real pywin32 install with uninitialized workspace fails."""
+    monkeypatch.setattr("ai_local.runtime.pywin32_service._is_windows", lambda: True)
+    monkeypatch.setattr("ai_local.runtime.pywin32_service.pywin32_available", lambda: True)
+    monkeypatch.setattr("ai_local.runtime.pywin32_service.require_pywin32", lambda: None)
+    # Prevent _resolve_workspace from creating .ai-local dirs
+    monkeypatch.setattr(
+        "ai_local.cli.commands.service._resolve_workspace",
+        lambda ws: ws.resolve(),
+    )
+
+    runner = CliRunner()
+    # Do NOT init workspace
+    ai_local_dir = tmp_path / ".ai-local"
+    assert not ai_local_dir.exists(), "precondition: workspace not initialised"
+    result = runner.invoke(
+        app,
+        [
+            "service", "install",
+            "--strategy", "pywin32",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code != 0, result.output
+    assert "has not been initialised" in result.output
+
+
+def test_nssm_dry_run_unchanged_with_strategy_flag(tmp_path: Path) -> None:
+    """NSSM dry-run is identical with explicit --strategy nssm."""
+    runner = CliRunner()
+    from ai_local.cli.commands.service import _ensure_workspace
+
+    _ensure_workspace(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "service", "install",
+            "--dry-run",
+            "--strategy", "nssm",
+            "--workspace", str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SERVICE install dry-run" in result.output
+    assert "NAME AI Local Agent Runtime" in result.output
+    # Should NOT have pywin32-specific output
+    assert "pywin32" not in result.output
+    assert "STRATEGY" not in result.output
