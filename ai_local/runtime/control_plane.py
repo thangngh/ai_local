@@ -147,8 +147,18 @@ def build_runtime_control_snapshot(
     )
 
 
-def render_runtime_control_snapshot(snapshot: RuntimeControlSnapshot) -> str:
+def render_runtime_control_snapshot(
+    snapshot: RuntimeControlSnapshot,
+    last_worker_result: dict | None = None,
+) -> str:
     q = snapshot.queue_counts
+    if last_worker_result:
+        ws = last_worker_result.get("status", "none")
+        wp = last_worker_result.get("processed", 0)
+        wj = last_worker_result.get("job_id", "none")
+        worker_line = f"WORKER last_status={ws} processed={wp} job_id={wj}"
+    else:
+        worker_line = "WORKER last_status=none processed=0 job_id=none"
     lines = [
         f"RUNTIME status={snapshot.health}",
         "TASKS "
@@ -156,7 +166,7 @@ def render_runtime_control_snapshot(snapshot: RuntimeControlSnapshot) -> str:
         f"pending={q.get('pending', 0)} "
         f"done={q.get('succeeded', 0)} "
         f"cancelled={q.get('cancelled', 0)}",
-        "WORKER last_status=none processed=0 job_id=none",
+        worker_line,
     ]
 
     if snapshot.daemon_status is not None:

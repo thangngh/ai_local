@@ -86,7 +86,7 @@ LOGS .tmp-demo\.ai-local\logs\daemon.log tail=5
 ```
 RUNTIME status=ok
 TASKS total=4 pending=0 done=4 cancelled=0
-WORKER last_status=none processed=0 job_id=none
+WORKER last_status=skipped processed=0 job_id=none
 DAEMON status=stopped stale=none pid=2564 iterations=2 stop_reason=max_iterations
 PATHS logs_dir=.tmp-demo\.ai-local\logs reports_dir=.tmp-demo\.ai-local\reports
 ```
@@ -213,3 +213,7 @@ all produce correct output on a non-elevated shell without NSSM.
 - The `restart-backend-service.ps1` and `show-backend-service-status.ps1`
   scripts were not executed because they depend on the service being
   installed.
+
+---
+**Final status: BLOCKED-PASS.** Implementation and guard behaviour validated;
+real elevated NSSM service validation pending.

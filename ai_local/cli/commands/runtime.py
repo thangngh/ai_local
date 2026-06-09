@@ -20,7 +20,8 @@ def runtime_status_group(workspace: Path = typer.Option(Path("."), "--workspace"
     """Print runtime control plane status."""
     paths = ensure_workspace(workspace)
     snapshot = build_runtime_control_snapshot(tasks_db=paths["tasks_db"], audit_db=paths["audit_db"])
-    typer.echo(render_runtime_control_snapshot(snapshot))
+    last_result = load_last_worker_result(workspace)
+    typer.echo(render_runtime_control_snapshot(snapshot, last_worker_result=last_result))
 
 
 def _build_runtime_snapshot_report(
