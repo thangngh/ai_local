@@ -1,25 +1,16 @@
 from __future__ import annotations
 
 import json
-import importlib.util
-import platform
-import subprocess
 from pathlib import Path
 
 import typer
 from ai_local.runtime.worker_contract import run_worker_once
 
 # Indexer imports are lazy-loaded within the respective command functions to avoid heavy dependencies at import time.
-# from ai_local.indexer.project import rebuild_project_index, refresh_project_index
-# from ai_local.indexer.sqlite_store import KnowledgeIndexStore
 from ai_local.queue.models import Job
 from ai_local.queue.operations import cancel_queue_job
 from ai_local.queue.store import SQLiteQueueStore
 from ai_local.runtime.backup import create_runtime_backup, restore_runtime_backup
-from ai_local.runtime.control_plane import (
-    build_runtime_control_snapshot,
-    render_runtime_control_snapshot,
-)
 
 app = typer.Typer()
 
@@ -30,9 +21,9 @@ task_app = typer.Typer()
 from ai_local.cli.commands.runtime import runtime_app
 from ai_local.cli.commands.worker import worker_app
 from ai_local.cli.commands.daemon import daemon_app
+from ai_local.cli.commands.demo import demo_app
+from ai_local.cli.commands.service import service_app
 gate_app = typer.Typer()
-demo_app = typer.Typer()
-service_app = typer.Typer()
 
 app.add_typer(config_app, name="config")
 app.add_typer(index_app, name="index")
@@ -95,6 +86,7 @@ def index_scan_group(
     # Lazy import to avoid heavy dependencies unless this command is used
     from ai_local.indexer.project import refresh_project_index
     from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
     paths = _ensure_workspace(workspace)
     store = KnowledgeIndexStore(paths["knowledge_db"])
     batch = refresh_project_index(root, store)
@@ -109,6 +101,7 @@ def index_rebuild_group(
     # Lazy import
     from ai_local.indexer.project import rebuild_project_index
     from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
     paths = _ensure_workspace(workspace)
     store = KnowledgeIndexStore(paths["knowledge_db"])
     batch = rebuild_project_index(root, store)
@@ -119,6 +112,7 @@ def index_rebuild_group(
 def index_stats_group(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     # Lazy import
     from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
     paths = _ensure_workspace(workspace)
     store = KnowledgeIndexStore(paths["knowledge_db"])
     store.initialize()
@@ -133,6 +127,7 @@ def index_search_group(
 ) -> None:
     # Lazy import
     from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
     paths = _ensure_workspace(workspace)
     store = KnowledgeIndexStore(paths["knowledge_db"])
     store.initialize()
@@ -142,6 +137,7 @@ def index_search_group(
 
 
 from ai_local.cli.commands.ask import ask_group  # noqa: E402
+
 app.command("ask")(ask_group)
 
 
@@ -149,6 +145,7 @@ app.command("ask")(ask_group)
 def knowledge_add(path: Path, workspace: Path = typer.Option(Path("."), "--workspace", "-w"), tag: str = typer.Option(..., "--tag")) -> None:
     paths = _ensure_workspace(workspace)
     from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
     store = SQLiteKnowledgeStore(paths["knowledge_db"])
     store.initialize()
     entry = store.add_file(path, tag)
@@ -159,6 +156,7 @@ def knowledge_add(path: Path, workspace: Path = typer.Option(Path("."), "--works
 def knowledge_add_note(text: str, workspace: Path = typer.Option(Path("."), "--workspace", "-w"), tag: str = typer.Option(..., "--tag")) -> None:
     paths = _ensure_workspace(workspace)
     from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
     store = SQLiteKnowledgeStore(paths["knowledge_db"])
     store.initialize()
     entry = store.add_note(text, tag)
@@ -169,6 +167,7 @@ def knowledge_add_note(text: str, workspace: Path = typer.Option(Path("."), "--w
 def knowledge_list(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     paths = _ensure_workspace(workspace)
     from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
     store = SQLiteKnowledgeStore(paths["knowledge_db"])
     store.initialize()
     entries = store.list_all()
@@ -181,6 +180,7 @@ def knowledge_list(workspace: Path = typer.Option(Path("."), "--workspace", "-w"
 def knowledge_search(query: str, workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     paths = _ensure_workspace(workspace)
     from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
     store = SQLiteKnowledgeStore(paths["knowledge_db"])
     store.initialize()
     entries = store.search(query)
@@ -218,9 +218,6 @@ def worker_run_group(
     worker_run(once=once, loop=loop, workspace=workspace)
 
 
-
-
-
 backup_app = typer.Typer()
 runtime_app.add_typer(backup_app, name="backup")
 
@@ -240,76 +237,6 @@ def runtime_backup_restore_group(backup_path: Path, workspace: Path = typer.Opti
 @gate_app.command("run")
 def gate_run_group(level: str, workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     typer.echo(f"GATE run level={level} workspace={workspace}")
-
-
-@demo_app.command("run")
-def demo_run_group(
-    name: str,
-    workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
-) -> None:
-    if name == "basic":
-        demo_run_basic(workspace=workspace)
-    elif name == "daemon":
-        demo_run_daemon(workspace=workspace)
-    else:
-        raise typer.Exit(code=2)
-
-
-# Legacy daemon command removed; using daemon_app's implementation with --once support.
-
-
-@service_app.command("install")
-def service_install_group(
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
-) -> None:
-    _ensure_workspace(workspace)
-    if dry_run:
-        typer.echo("SERVICE install dry-run")
-        typer.echo(f"NAME AI Local Agent Runtime")
-        typer.echo(f"COMMAND python -m ai_local.cli daemon run --workspace {workspace} --loop --poll-interval 1.0")
-        typer.echo("NOTE dry-run only; no Windows service was created")
-        return
-    service_install(dry_run=dry_run)
-
-
-@service_app.command("uninstall")
-def service_uninstall_group(
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    if dry_run:
-        typer.echo("sc.exe delete ai-local")
-        return
-    service_uninstall()
-
-
-@service_app.command("start")
-def service_start_group(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    if dry_run:
-        typer.echo("Start-Service ai-local")
-        return
-    service_start()
-
-
-@service_app.command("stop")
-def service_stop_group(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    if dry_run:
-        typer.echo("Stop-Service ai-local")
-        return
-    service_stop()
-
-
-@service_app.command("status")
-def service_status_group(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    if dry_run:
-        typer.echo("Get-Service ai-local")
-        return
-    service_status()
-
-
-@service_app.command("logs")
-def service_logs_group(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
-    service_logs(workspace=workspace)
 
 
 @app.command()
@@ -395,8 +322,6 @@ def index_search(
         typer.echo(f"{hit.source_ref} {hit.content[:120].replace(chr(10), ' ')}")
 
 
-
-
 @app.command("runtime-backup-create")
 def runtime_backup_create(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     paths = _ensure_workspace(workspace)
@@ -454,8 +379,6 @@ def worker_run(
 
     * ``--once`` processes a single job (or none) and exits.
     * ``--loop`` processes jobs continuously until interrupted.
-    The original CLI printed ``WORKER ran``/``idle``; now we emit the
-    contract‑specified format.
     """
     if once:
         result = run_worker_once(workspace)
@@ -465,7 +388,7 @@ def worker_run(
             typer.echo(f"WORKER once SKIP processed={result.processed} reason=\"{result.reason}\"")
         raise typer.Exit(code=0)
 
-    # ``--loop`` mode (not part of Phase 4A but retained for compatibility)
+    # ``--loop`` mode (not part of Phase 4A but retained for compatibility)
     while True:
         result = run_worker_once(workspace)
         if result.status == "pass":
@@ -475,311 +398,3 @@ def worker_run(
         if not loop:
             break
     raise typer.Exit(code=0)
-
-
-@app.command("demo-run-basic")
-def demo_run_basic(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
-    import time
-    from datetime import datetime, timezone
-    from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
-
-    typer.echo("DEMO basic")
-    paths = _ensure_workspace(workspace)
-
-    # 1. Init
-    config = {
-        "workspace": str(workspace.resolve()),
-        "knowledge_db": str(paths["knowledge_db"]),
-        "runtime_db": str(paths["runtime_db"]),
-        "tasks_db": str(paths["tasks_db"]),
-        "audit_db": str(paths["audit_db"]),
-    }
-    paths["config"].write_text(json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    typer.echo("STEP init PASS")
-
-    # 2. Knowledge add
-    store = SQLiteKnowledgeStore(paths["knowledge_db"])
-    store.initialize()
-    
-    demo_title = "demo:local-first-invariant"
-    demo_tags = ["demo", "basic", "invariant"]
-    
-    # Check if demo note already exists
-    with store._connect() as conn:
-        row = conn.execute("SELECT id FROM knowledge WHERE title = ?", (demo_title,)).fetchone()
-        
-    if row:
-        knowledge_id = row["id"]
-        knowledge_mode = "reused"
-    else:
-        entry = store.add_note("AI Local keeps workflow state local-first.", demo_tags, title=demo_title)
-        knowledge_id = entry.id
-        knowledge_mode = "created"
-        
-    typer.echo(f"STEP knowledge_add PASS id={knowledge_id} mode={knowledge_mode}")
-
-    # 3. Knowledge search
-    hits = store.search("local-first workflow")
-    demo_matches = sum(1 for h in hits if h.title == demo_title)
-    typer.echo(f"STEP knowledge_search PASS matches={len(hits)} demo_matches={demo_matches}")
-
-    # 4. Ask
-    knowledge_hits = store.search("What does AI Local keep local?")
-    decision = "enough_context" if knowledge_hits else "low_context"
-    ask_report = {
-        "question": "What does AI Local keep local?",
-        "decision": decision,
-        "answer_draft": f"Based on knowledge note: {knowledge_hits[0].content}" if knowledge_hits else "",
-        "evidence": [
-            {
-                "source": "knowledge",
-                "id": str(h.id),
-                "title": h.title,
-                "score": 1.0,
-                "snippet": h.content[:100],
-            }
-            for h in knowledge_hits
-        ],
-    }
-    ask_timestamp = int(time.time())
-    ask_report_path = paths["reports"] / f"ask-{ask_timestamp}.json"
-    ask_report_path.write_text(json.dumps(ask_report, indent=2), encoding="utf-8")
-    typer.echo(f"STEP ask PASS decision={decision}")
-
-    # 5. Task submit
-    queue = SQLiteQueueStore(paths["tasks_db"])
-    task_id = f"task-{len(queue.list_jobs())+1}"
-    queue.enqueue(Job(id=task_id, type="demo", payload={"task": "demo task"}))
-    typer.echo(f"STEP task_submit PASS id={task_id}")
-
-    # 6. Worker once
-    job = queue.claim_next()
-    worker_step_status = "pass"
-    worker_step_data = {}
-    if job:
-        queue.mark_running(job)
-        queue.mark_succeeded(job)
-        worker_step_data["processed"] = 1
-        typer.echo("STEP worker_once PASS")
-    else:
-        worker_step_status = "skipped"
-        worker_step_data["reason"] = "no jobs in queue"
-        typer.echo("STEP worker_once SKIP reason=\"no jobs in queue\"")
-
-    # 7. Runtime snapshot
-    snapshot = build_runtime_control_snapshot(tasks_db=paths["tasks_db"], audit_db=paths["audit_db"])
-    typer.echo("STEP runtime_snapshot PASS")
-
-    # 8. Report
-    demo_report_path = paths["reports"] / "demo-basic.json"
-    
-    # Handle snapshot serialization safely
-    snapshot_data = snapshot
-    if hasattr(snapshot, "model_dump"):
-        snapshot_data = snapshot.model_dump(mode="json")
-    elif hasattr(snapshot, "__dict__"):
-        snapshot_data = snapshot.__dict__
-
-    report = {
-        "workspace": str(workspace.resolve()),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "pass",
-        "steps": [
-            {"name": "init", "status": "pass"},
-            {
-                "name": "knowledge_add",
-                "status": "pass",
-                "knowledge_id": knowledge_id,
-                "mode": knowledge_mode
-            },
-            {"name": "knowledge_search", "status": "pass", "matches": len(hits), "demo_matches": demo_matches},
-            {"name": "ask", "status": "pass", "decision": decision, "report_path": str(ask_report_path)},
-            {"name": "task_submit", "status": "pass", "task_id": task_id},
-            {
-                "name": "worker_once",
-                "status": worker_step_status,
-                **worker_step_data
-            },
-            {"name": "runtime_snapshot", "status": "pass", "report_path": "inline"},
-        ],
-        "artifacts": {
-            "ask_report": str(ask_report_path),
-            "runtime_snapshot": snapshot_data,
-            "demo_report": str(demo_report_path),
-        },
-        "limitations": [
-            "local deterministic demo only",
-            "no cloud model call",
-            "not a production service workflow",
-        ],
-    }
-
-    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    typer.echo(f"REPORT {demo_report_path}")
-
-
-def demo_run_daemon(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
-    import time
-    from datetime import datetime, timezone
-    from ai_local.runtime.control_plane import (
-        build_runtime_control_snapshot,
-        render_runtime_control_snapshot,
-    )
-    from ai_local.runtime.daemon_contract import (
-        acquire_daemon_lock,
-        append_daemon_log,
-        load_daemon_heartbeat,
-        release_daemon_lock,
-        write_daemon_heartbeat,
-    )
-    from ai_local.runtime.worker_contract import ensure_workspace, run_worker_once
-    from ai_local.queue.models import Job
-    from ai_local.queue.store import SQLiteQueueStore
-
-    typer.echo("DEMO daemon")
-    paths = _ensure_workspace(workspace)
-    queue = SQLiteQueueStore(paths["tasks_db"])
-    log_path = paths["logs"] / "daemon.log"
-
-    # 1. Init (already done by _ensure_workspace)
-    typer.echo("STEP init PASS")
-
-    # 2. Task submit
-    task_id = f"task-{len(queue.list_jobs())+1}"
-    queue.enqueue(Job(id=task_id, type="demo", payload={"task": "daemon demo task"}))
-    typer.echo(f"STEP task_submit PASS id={task_id}")
-
-    # 3. Daemon loop (inline, 2 iterations)
-    mode = "loop"
-    acquire_daemon_lock(workspace)
-    write_daemon_heartbeat(workspace, status="running", mode=mode)
-    daemon_iterations = 0
-    for _ in range(2):
-        daemon_iterations += 1
-        result = run_worker_once(workspace)
-        append_daemon_log(
-            workspace,
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "component": "daemon",
-                "mode": "loop",
-                "iteration": daemon_iterations,
-                "worker": {
-                    "status": result.status,
-                    "processed": result.processed,
-                    "job_id": result.job_id,
-                    "reason": result.reason,
-                },
-            },
-        )
-        write_daemon_heartbeat(
-            workspace, status="running", mode=mode, iteration=daemon_iterations
-        )
-    write_daemon_heartbeat(
-        workspace,
-        status="stopped",
-        mode=mode,
-        iteration=daemon_iterations,
-        stop_reason="max_iterations",
-    )
-    release_daemon_lock(workspace)
-    typer.echo(f"STEP daemon_loop PASS iterations={daemon_iterations}")
-
-    # 4. Runtime status (build snapshot to verify it works)
-    snapshot = build_runtime_control_snapshot(tasks_db=paths["tasks_db"], audit_db=paths["audit_db"])
-    _ = render_runtime_control_snapshot(snapshot)  # verify rendering works
-    typer.echo("STEP runtime_status PASS")
-
-    # 5. Runtime logs (check file exists)
-    if log_path.exists():
-        typer.echo("STEP runtime_logs PASS")
-    else:
-        typer.echo("STEP runtime_logs PASS (no log yet)")
-
-    # 6. Runtime snapshot (write JSON directly)
-    from ai_local.cli.commands.runtime import _build_runtime_snapshot_report
-    report_data = _build_runtime_snapshot_report(snapshot, paths)
-    snapshot_path = paths["reports"] / "runtime-snapshot.json"
-    snapshot_path.write_text(json.dumps(report_data, indent=2), encoding="utf-8")
-    typer.echo("STEP runtime_snapshot PASS")
-
-    # 7. Report
-    heartbeat = load_daemon_heartbeat(workspace) or {}
-    report = {
-        "workspace": str(workspace.resolve()),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "pass",
-        "steps": [
-            {"name": "init", "status": "pass"},
-            {"name": "task_submit", "status": "pass", "task_id": task_id},
-            {"name": "daemon_loop", "status": "pass", "iterations": daemon_iterations},
-            {"name": "runtime_status", "status": "pass"},
-            {"name": "runtime_logs", "status": "pass"},
-            {"name": "runtime_snapshot", "status": "pass"},
-        ],
-        "artifacts": {
-            "daemon_log": str(log_path),
-            "daemon_heartbeat": str(paths["reports"] / "daemon-heartbeat.json"),
-            "runtime_snapshot": str(paths["reports"] / "runtime-snapshot.json"),
-            "demo_report": str(paths["reports"] / "demo-daemon.json"),
-        },
-        "limitations": [
-            "local deterministic demo only",
-            "not a Windows Service",
-            "not production daemon hardening",
-        ],
-    }
-    demo_report_path = paths["reports"] / "demo-daemon.json"
-    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    typer.echo(f"REPORT {demo_report_path}")
-
-
-def _unsupported() -> None:
-    typer.echo("service commands are only supported on Windows", err=True)
-    raise typer.Exit(code=1)
-
-
-@app.command("service-install")
-def service_install(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    if platform.system() != "Windows":
-        _unsupported()
-    cmd = ["powershell.exe", "-NoProfile", "-Command", "New-Service -Name 'ai-local' -BinaryPathName 'python -m ai_local.cli daemon run'"]
-    typer.echo(" ".join(cmd))
-    if dry_run:
-        return
-    subprocess.run(cmd, check=True)
-
-
-@app.command("service-uninstall")
-def service_uninstall() -> None:
-    if platform.system() != "Windows":
-        _unsupported()
-    typer.echo("sc.exe delete ai-local")
-
-
-@app.command("service-start")
-def service_start() -> None:
-    if platform.system() != "Windows":
-        _unsupported()
-    typer.echo("Start-Service ai-local")
-
-
-@app.command("service-stop")
-def service_stop() -> None:
-    if platform.system() != "Windows":
-        _unsupported()
-    typer.echo("Stop-Service ai-local")
-
-
-@app.command("service-status")
-def service_status() -> None:
-    if platform.system() != "Windows":
-        _unsupported()
-    typer.echo("Get-Service ai-local")
-
-
-@app.command("service-logs")
-def service_logs(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
-    paths = _ensure_workspace(workspace)
-    for log in sorted(paths["logs"].glob("*.log")):
-        typer.echo(str(log))
