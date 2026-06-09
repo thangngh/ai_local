@@ -1,6 +1,6 @@
 {
   "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-demo",
-  "created_at": "2026-06-08T09:39:52.583136+00:00",
+  "created_at": "2026-06-09T02:26:07.584254+00:00",
   "status": "pass",
   "steps": [
     {
@@ -10,25 +10,25 @@
     {
       "name": "knowledge_add",
       "status": "pass",
-      "knowledge_id": 5,
-      "mode": "reused"
+      "knowledge_id": 1,
+      "mode": "created"
     },
     {
       "name": "knowledge_search",
       "status": "pass",
-      "matches": 5,
+      "matches": 1,
       "demo_matches": 1
     },
     {
       "name": "ask",
       "status": "pass",
       "decision": "enough_context",
-      "report_path": ".tmp-demo\\.ai-local\\reports\\ask-1780911592.json"
+      "report_path": ".tmp-demo\\.ai-local\\reports\\ask-1780971967.json"
     },
     {
       "name": "task_submit",
       "status": "pass",
-      "task_id": "task-22"
+      "task_id": "task-4"
     },
     {
       "name": "worker_once",
@@ -42,14 +42,14 @@
     }
   ],
   "artifacts": {
-    "ask_report": ".tmp-demo\\.ai-local\\reports\\ask-1780911592.json",
+    "ask_report": ".tmp-demo\\.ai-local\\reports\\ask-1780971967.json",
     "runtime_snapshot": {
       "health": "ok",
       "queue_counts": {
         "pending": 0,
         "claimed": 0,
         "running": 0,
-        "succeeded": 22,
+        "succeeded": 4,
         "failed": 0,
         "dead_letter": 0,
         "cancelled": 0
@@ -73,9 +73,14 @@
       "recent_audit_events": [],
       "issues": [],
       "daemon_status": "stopped",
-      "daemon_pid": 24628,
-      "daemon_last_seen_at": "2026-06-08T08:33:05.714343Z",
-      "daemon_iterations": 3
+      "daemon_pid": 2564,
+      "daemon_last_seen_at": "2026-06-09T02:25:14.189388+00:00",
+      "daemon_iterations": 2,
+      "daemon_stop_reason": "max_iterations",
+      "daemon_stale": null,
+      "daemon_stale_after_seconds": 60,
+      "logs_dir": ".tmp-demo\\.ai-local\\logs",
+      "reports_dir": ".tmp-demo\\.ai-local\\reports"
     },
     "demo_report": ".tmp-demo\\.ai-local\\reports\\demo-basic.json"
   },

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest tests/test_demo_cli.py tests/test_worker_daemon_runtime.py -q)",
-      "Bash(cd *)"
+      "Bash(cd *)",
+      "Bash(python *)",
+      "PowerShell(cd D:/2026/agent_new/ai_local; $isAdmin = \\([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent\\(\\)\\).IsInRole\\([Security.Principal.WindowsBuiltInRole]::Administrator\\); Write-Output \"IsAdmin: $isAdmin\"; .\\\\scripts\\\\windows-service\\\\check-nssm.ps1; python -m ai_local.cli init --workspace .tmp-demo)"
     ]
   }
 }

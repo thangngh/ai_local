@@ -1,0 +1,44 @@
+{
+  "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-demo",
+  "created_at": "2026-06-09T02:25:14.202685+00:00",
+  "status": "pass",
+  "steps": [
+    {
+      "name": "init",
+      "status": "pass"
+    },
+    {
+      "name": "task_submit",
+      "status": "pass",
+      "task_id": "task-3"
+    },
+    {
+      "name": "daemon_loop",
+      "status": "pass",
+      "iterations": 2
+    },
+    {
+      "name": "runtime_status",
+      "status": "pass"
+    },
+    {
+      "name": "runtime_logs",
+      "status": "pass"
+    },
+    {
+      "name": "runtime_snapshot",
+      "status": "pass"
+    }
+  ],
+  "artifacts": {
+    "daemon_log": ".tmp-demo\\.ai-local\\logs\\daemon.log",
+    "daemon_heartbeat": ".tmp-demo\\.ai-local\\reports\\daemon-heartbeat.json",
+    "runtime_snapshot": ".tmp-demo\\.ai-local\\reports\\runtime-snapshot.json",
+    "demo_report": ".tmp-demo\\.ai-local\\reports\\demo-daemon.json"
+  },
+  "limitations": [
+    "local deterministic demo only",
+    "not a Windows Service",
+    "not production daemon hardening"
+  ]
+}

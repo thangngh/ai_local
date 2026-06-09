@@ -6,14 +6,7 @@
     {
       "source": "knowledge",
       "id": "1",
-      "title": "note",
-      "score": 1.0,
-      "snippet": "AI Local keeps workflow state local-first."
-    },
-    {
-      "source": "knowledge",
-      "id": "2",
-      "title": "note",
+      "title": "demo:local-first-invariant",
       "score": 1.0,
       "snippet": "AI Local keeps workflow state local-first."
     }
