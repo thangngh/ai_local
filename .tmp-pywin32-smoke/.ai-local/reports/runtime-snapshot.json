@@ -1,0 +1,19 @@
+{
+  "tasks_total": 1,
+  "tasks_pending": 0,
+  "tasks_done": 1,
+  "tasks_cancelled": 0,
+  "last_worker_result": {
+    "status": "skipped",
+    "processed": 0,
+    "reason": "no pending job"
+  },
+  "logs_dir": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\logs",
+  "reports_dir": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\reports",
+  "daemon_status": "running",
+  "daemon_pid": 29920,
+  "daemon_last_seen_at": "2026-06-10T02:53:50.960972+00:00",
+  "daemon_iterations": 175,
+  "daemon_stale": false,
+  "daemon_stale_after_seconds": 60
+}

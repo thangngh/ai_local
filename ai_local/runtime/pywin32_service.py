@@ -26,22 +26,33 @@ from pathlib import Path
 SERVICE_ID = "ai-local-agent-runtime-pywin32"
 SERVICE_DISPLAY_NAME = "AI Local Agent Runtime (pywin32)"
 SERVICE_DESCRIPTION = "Local-first AI agent runtime daemon"
+# The service class will be defined conditionally below.
+SERVICE_CLASS: str | None = None
 
+# ─── Availability helpers ─────────────────────────────────────────────────────
 
-# ── Availability helpers -----------------------------------------------------
+def _load_pywin32_modules():
+    """Attempt to import pywin32 modules, returning a tuple.
 
+    Returns ``None`` if any import fails.  The returned tuple contains the
+    modules in the same order as they are used in the service class.
+    """
+    try:
+        import servicemanager
+        import win32event
+        import win32service
+        import win32serviceutil
+    except ImportError:
+        return None
+    return servicemanager, win32event, win32service, win32serviceutil
+
+_pywin32_modules = _load_pywin32_modules()
+
+# Expose helpers for callers
 
 def pywin32_available() -> bool:
     """Return ``True`` when pywin32 can be imported."""
-    try:
-        import win32serviceutil  # noqa: F401
-        import win32service  # noqa: F401
-        import win32event  # noqa: F401
-        import servicemanager  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return _pywin32_modules is not None
 
 
 def require_pywin32() -> None:
@@ -53,6 +64,7 @@ def require_pywin32() -> None:
             "to the service account."
         )
 
+# ─── Windows check helpers ────────────────────────────────────────────────────
 
 def _is_windows() -> bool:
     return platform.system() == "Windows"
@@ -62,9 +74,7 @@ def _check_windows() -> None:
     if not _is_windows():
         raise RuntimeError("Windows only")
 
-
-# ── Config file helpers -------------------------------------------------------
-
+# ─── Config file helpers ─────────────────────────────────────────────────────
 
 def _config_path(workspace: Path) -> Path:
     """Return the path to the pywin32 service config JSON file."""
@@ -98,20 +108,9 @@ def read_config(workspace: Path) -> dict | None:
     except (json.JSONDecodeError, OSError):
         return None
 
-
-# ── Service class (lazy — defined only when pywin32 is importable) ------------
-
-def _get_service_class():
-    """Return the ``Pywin32DaemonService`` class, importing pywin32 lazily.
-
-    Raises :class:`RuntimeError` if pywin32 is not available.
-    """
-    require_pywin32()
-
-    import servicemanager
-    import win32event
-    import win32service
-    import win32serviceutil
+# ─── Service class definition (conditional) ───────────────────────────────────
+if _pywin32_modules is not None:
+    servicemanager, win32event, win32service, win32serviceutil = _pywin32_modules
 
     class Pywin32DaemonService(win32serviceutil.ServiceFramework):
         """Windows Service host for the AI Local agent runtime daemon."""
@@ -126,8 +125,8 @@ def _get_service_class():
             self._config: dict | None = None
 
         def SvcDoRun(self) -> None:
-            """Called by the SCM when the service is started."""
             from ai_local.runtime.daemon_contract import run_daemon_loop
+            import winreg
 
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_INFORMATION_TYPE,
@@ -135,27 +134,35 @@ def _get_service_class():
                 (self._svc_name_, "Service starting"),
             )
 
-            # Load config
-            config_path = (
-                Path(__file__).parent.parent
-                / ".ai-local"
-                / "reports"
-                / "pywin32-service.json"
-            )
-            if config_path.exists():
-                self._config = json.loads(config_path.read_text(encoding="utf-8"))
-            else:
-                self._config = None
+            # Load config from registry Parameters subkey set at install time
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    f"SYSTEM\\CurrentControlSet\\Services\\{SERVICE_ID}\\Parameters",
+                ) as key:
+                    workspace_str = winreg.QueryValueEx(key, "workspace")[0]
+                    poll_interval_str = winreg.QueryValueEx(key, "poll_interval")[0]
+                    self._config = {
+                        "workspace": workspace_str,
+                        "poll_interval": float(poll_interval_str),
+                    }
+            except Exception as exc:
+                servicemanager.LogMsg(
+                    servicemanager.EVENTLOG_ERROR_TYPE,
+                    0xF001,
+                    (self._svc_name_, f"Failed to read config from registry: {exc}"),
+                )
+                return
 
             if self._config is None or "workspace" not in self._config:
                 servicemanager.LogMsg(
                     servicemanager.EVENTLOG_ERROR_TYPE,
                     0xF001,
-                    (self._svc_name_, "No config found; cannot start daemon loop"),
+                    (self._svc_name_, "No config found in registry; cannot start daemon loop"),
                 )
                 return
 
-            workspace = Path(self._config["workspace"])
+            workspace = Path(self._config["workspace"])  # noqa: PLW2901
             poll_interval = self._config.get("poll_interval", 1.0)
 
             def emit(msg: str) -> None:
@@ -194,15 +201,12 @@ def _get_service_class():
                 )
 
         def SvcStop(self) -> None:
-            """Called by the SCM when the service is asked to stop."""
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_INFORMATION_TYPE,
                 0xF005,
                 (self._svc_name_, "Service stopping"),
             )
-            # Signal the daemon loop to exit
             win32event.SetEvent(self._stop_event)
-            # Notify SCM we are stopping
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_INFORMATION_TYPE,
@@ -210,14 +214,17 @@ def _get_service_class():
                 (self._svc_name_, "Service stopped"),
             )
 
-    return Pywin32DaemonService
+    SERVICE_CLASS = "ai_local.runtime.pywin32_service.Pywin32DaemonService"
+else:
+    # Placeholder class when pywin32 is not available.
+    class Pywin32DaemonService:  # type: ignore
+        """Placeholder when pywin32 is not available."""
 
+    SERVICE_CLASS = None
 
-# ── Install / remove / start / stop / status helpers ---------------------------
-
+# ─── Install / remove / start / stop / status helpers ────────────────────────
 
 def _workspace_ok(workspace: Path) -> Path:
-    """Validate workspace and return resolved absolute path."""
     abs_ws = workspace.resolve()
     ai_local_dir = abs_ws / ".ai-local"
     if not ai_local_dir.is_dir():
@@ -229,47 +236,37 @@ def _workspace_ok(workspace: Path) -> Path:
 
 
 def _run_python_module(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """Run a subprocess calling this same module."""
     cmd = [str(sys.executable), "-m", "ai_local.runtime.pywin32_service", *args]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
 def install_pywin32_service(workspace: Path, *, startup: str = "manual") -> None:
-    """Install the daemon as a Windows Service via pywin32.
-
-    Args:
-        workspace: Initialised workspace path.
-        startup: Startup type --- ``"auto"`` or ``"manual"`` (default).
-
-    Raises:
-        RuntimeError: On non-Windows, missing pywin32, or uninitialised workspace.
-    """
     _check_windows()
     require_pywin32()
     abs_ws = _workspace_ok(workspace)
 
-    # Write config so the service class can find its workspace
     write_config(abs_ws, poll_interval=1.0)
 
-    # Use win32serviceutil to install
     import win32serviceutil
 
-    svc_class = _get_service_class()
-    start_type = 2 if startup == "auto" else 3  # SERVICE_AUTO_START / SERVICE_DEMAND_START
+    start_type = (
+        win32service.SERVICE_AUTO_START if startup == "auto" else win32service.SERVICE_DEMAND_START
+    )
     try:
         win32serviceutil.InstallService(
-            svc_class,
+            SERVICE_CLASS,
             SERVICE_ID,
             SERVICE_DISPLAY_NAME,
             startType=start_type,
         )
-    except Exception as exc:
+        win32serviceutil.SetServiceCustomOption(SERVICE_ID, "workspace", str(abs_ws))
+        win32serviceutil.SetServiceCustomOption(SERVICE_ID, "poll_interval", "1.0")
+    except Exception as exc:  # pragma: no cover - exercised by tests
         raise RuntimeError(f"Failed to install pywin32 service: {exc}") from exc
 
-    # Set description via win32service
+    # Configure the service description after installation.
     try:
         import win32service as _ws
-
         scm = _ws.OpenSCManager(None, None, _ws.SC_MANAGER_ALL_ACCESS)
         try:
             svc = _ws.OpenService(scm, SERVICE_ID, _ws.SERVICE_CHANGE_CONFIG)
@@ -289,80 +286,48 @@ def install_pywin32_service(workspace: Path, *, startup: str = "manual") -> None
             _ws.CloseServiceHandle(svc)
         finally:
             _ws.CloseServiceHandle(scm)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - exercised by tests
         raise RuntimeError(
             f"Failed to configure pywin32 service description: {exc}"
         ) from exc
 
 
 def remove_pywin32_service() -> None:
-    """Remove the pywin32 Windows Service.
-
-    Raises:
-        RuntimeError: On non-Windows or missing pywin32.
-    """
     _check_windows()
     require_pywin32()
-
     import win32serviceutil
-
     try:
         win32serviceutil.RemoveService(SERVICE_ID)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to remove pywin32 service: {exc}") from exc
 
 
 def start_pywin32_service() -> None:
-    """Start the pywin32 Windows Service.
-
-    Raises:
-        RuntimeError: On non-Windows or missing pywin32.
-    """
     _check_windows()
     require_pywin32()
-
     import win32serviceutil
-
     try:
         win32serviceutil.StartService(SERVICE_ID)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to start pywin32 service: {exc}") from exc
 
 
 def stop_pywin32_service() -> None:
-    """Stop the pywin32 Windows Service.
-
-    Raises:
-        RuntimeError: On non-Windows or missing pywin32.
-    """
     _check_windows()
     require_pywin32()
-
     import win32serviceutil
-
     try:
         win32serviceutil.StopService(SERVICE_ID)
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to stop pywin32 service: {exc}") from exc
 
 
 def status_pywin32_service() -> str:
-    """Query the pywin32 Windows Service status.
-
-    Returns:
-        A human-readable status string.
-
-    Raises:
-        RuntimeError: On non-Windows or missing pywin32.
-    """
     _check_windows()
     require_pywin32()
-
     import win32serviceutil
-
     try:
         raw = win32serviceutil.QueryServiceStatus(SERVICE_ID)
-        # raw is a tuple: (serviceType, currentState, controlsAccepted, ...)
         state_map = {
             1: "STOPPED",
             2: "START_PENDING",
@@ -374,15 +339,12 @@ def status_pywin32_service() -> str:
         }
         state_code = raw[1] if len(raw) > 1 else 0
         return state_map.get(state_code, f"UNKNOWN({state_code})")
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to query pywin32 service: {exc}") from exc
 
-
-# ── __main__ entry point ------------------------------------------------------
-
+# ─── __main__ entry point ───────────────────────────────────────────────────
 
 def main() -> None:
-    """Entry point for ``python -m ai_local.runtime.pywin32_service``."""
     import argparse
 
     parser = argparse.ArgumentParser(

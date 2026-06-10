@@ -1,0 +1,7 @@
+{
+  "audit_db": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\audit.db",
+  "knowledge_db": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\knowledge.db",
+  "runtime_db": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\runtime.db",
+  "tasks_db": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke\\.ai-local\\tasks.db",
+  "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-pywin32-smoke"
+}

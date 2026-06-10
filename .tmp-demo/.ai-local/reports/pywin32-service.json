@@ -1,0 +1,5 @@
+{
+  "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-demo",
+  "poll_interval": 1.0,
+  "service_id": "ai-local-agent-runtime-pywin32"
+}

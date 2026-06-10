@@ -1,0 +1,14 @@
+{
+  "question": "How do I install the Windows service?",
+  "decision": "enough_context",
+  "answer_draft": "Based on knowledge note: # Windows Service Installation Guide\n\n## Installing the pywin32 Windows Service\n\nTo install the AI Local Windows service using pywin32 strategy:\n\n1. **Prerequisites:**\n   - Windows operating system\n   - Python 3.10+\n   - pywin32 package installed: `pip install pywin32`\n   - Administrator privileges\n\n2. **Installation Steps:**\n   - Run PowerShell as Administrator\n   - Navigate to the project directory\n   - Execute: `python -m ai_local.cli service install --strategy pywin32 --workspace <workspace_path>`\n\n3. **Verify Installation:**\n   - Check service status: `ai-local service status --strategy pywin32`\n   - View in Services: `Get-Service ai-local-agent-runtime-pywin32`\n\n4. **Start the Service:**\n   - `python -m ai_local.cli service start --strategy pywin32 --workspace <workspace_path>`\n\n5. **Stop the Service:**\n   - `python -m ai_local.cli service stop --strategy pywin32 --workspace <workspace_path>`\n\n6. **Uninstall:**\n   - `python -m ai_local.cli service uninstall --strategy pywin32 --workspace <workspace_path>`\n\n## Registry Configuration\n\nThe service stores configuration in the Windows registry at:\n`HKLM\\SYSTEM\\CurrentControlSet\\Services\\ai-local-agent-runtime-pywin32\\Parameters`\n\nKey parameters:\n- `workspace`: The workspace directory path\n- `poll_interval`: Polling interval in seconds (default: 1.0)\n\n## Troubleshooting\n\nIf the service fails to start:\n1. Check Windows Event Log: `Get-WinEvent -LogName Application | Where-Object {$_.ProviderName -like '*ai-local*'}`\n2. Verify the package is installed: `pip list | grep ai-local`\n3. Ensure workspace is initialized: `ai-local init --workspace <path>`\n",
+  "evidence": [
+    {
+      "source": "knowledge",
+      "id": "1",
+      "title": "windows-service-guide.md",
+      "score": 1.0,
+      "snippet": "# Windows Service Installation Guide\n\n## Installing the pywin32 Windows Service\n\nTo install the AI L"
+    }
+  ]
+}

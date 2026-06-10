@@ -2,7 +2,9 @@ Metadata-Version: 2.4
 Name: ai-local
 Version: 0.1.0
 Summary: Local AI infrastructure built with Python and FastAPI
+License: Apache-2.0
 Requires-Python: >=3.11
+License-File: LICENSE
 Requires-Dist: fastapi>=0.115
 Requires-Dist: uvicorn[standard]>=0.30
 Requires-Dist: pydantic>=2.8
@@ -16,3 +18,6 @@ Requires-Dist: pytest>=8.0; extra == "dev"
 Requires-Dist: ruff>=0.6; extra == "dev"
 Requires-Dist: mypy>=1.11; extra == "dev"
 Requires-Dist: types-PyYAML>=6.0; extra == "dev"
+Provides-Extra: vector
+Requires-Dist: sqlite-vec>=0.1.9; extra == "vector"
+Dynamic: license-file

@@ -1,0 +1,7 @@
+{
+  "audit_db": ".tmp-index-demo\\.ai-local\\audit.db",
+  "knowledge_db": ".tmp-index-demo\\.ai-local\\knowledge.db",
+  "runtime_db": ".tmp-index-demo\\.ai-local\\runtime.db",
+  "tasks_db": ".tmp-index-demo\\.ai-local\\tasks.db",
+  "workspace": "D:\\2026\\agent_new\\ai_local\\.tmp-index-demo"
+}

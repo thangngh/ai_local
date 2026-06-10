@@ -12,3 +12,6 @@ pytest>=8.0
 ruff>=0.6
 mypy>=1.11
 types-PyYAML>=6.0
+
+[vector]
+sqlite-vec>=0.1.9
