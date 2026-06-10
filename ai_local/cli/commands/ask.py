@@ -31,17 +31,27 @@ def ask_group(
     except Exception:
         index_hits = []
 
-    # 3. Decision
+    # 3. Decision with smart ranking
     if not knowledge_hits and not index_hits:
         decision = "low_context"
         answer_draft = ""
     else:
         decision = "enough_context"
-        # Just use the first piece of evidence as deterministic answer draft
-        if knowledge_hits:
-            answer_draft = f"Based on knowledge note: {knowledge_hits[0].content}"
-        else:
+        # Pick best answer: prefer knowledge notes over files, prefer tagged matches
+        best_knowledge = None
+        for kh in knowledge_hits:
+            if kh.kind == 'note':
+                best_knowledge = kh
+                break
+        if not best_knowledge and knowledge_hits:
+            best_knowledge = knowledge_hits[0]
+
+        if best_knowledge:
+            answer_draft = f"Based on knowledge note: {best_knowledge.content}"
+        elif index_hits:
             answer_draft = f"Based on index: {index_hits[0].content[:100]}"
+        else:
+            answer_draft = ""
 
     # 4. Print
     typer.echo(f"DECISION: {decision}")
@@ -52,7 +62,8 @@ def ask_group(
 
     evidence_list = []
 
-    for hit in knowledge_hits:
+    # Show knowledge notes first (sorted: notes > files)
+    for hit in sorted(knowledge_hits, key=lambda h: (0 if h.kind == 'note' else 1, h.id)):
         evidence_list.append(
             {
                 "source": "knowledge",

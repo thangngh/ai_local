@@ -239,6 +239,121 @@ def gate_run_group(level: str, workspace: Path = typer.Option(Path("."), "--work
     typer.echo(f"GATE run level={level} workspace={workspace}")
 
 
+# ── Advanced gate commands (delegated to their implementation modules) ──────
+
+
+@gate_app.command("promote")
+def gate_promote_group(
+    max_level: str | None = typer.Option(None),
+    gates_config: Path = typer.Option(Path("configs/gates.yaml")),
+    tools_config: Path = typer.Option(Path("configs/tools.yaml")),
+    cwd: Path = typer.Option(Path(".")),
+) -> None:
+    """Promote gates up to max_level."""
+    from ai_local.harness.test_gate import run_promoted_gates
+
+    level_results = run_promoted_gates(
+        gates_config_path=gates_config,
+        tools_config_path=tools_config,
+        cwd=cwd,
+        max_level=max_level,
+    )
+    failed = False
+    for level_result in level_results:
+        typer.echo(f"[{level_result.level}]")
+        for result in level_result.results:
+            status = "PASS" if result.passed else "FAIL"
+            typer.echo(f"{status} {result.command_id} exit={result.exit_code}")
+            if not result.passed:
+                failed = True
+                if result.stderr:
+                    typer.echo(result.stderr)
+        if not level_result.passed:
+            typer.echo(f"STOP promotion at {level_result.level}")
+            break
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@gate_app.command("project-retrieval")
+def gate_project_retrieval_group(
+    query: str = typer.Argument(...),
+    root: Path = typer.Option(Path(".")),
+    knowledge_db: Path = typer.Option(Path("knowledge.db")),
+    chunk_lines: int = typer.Option(40, min=1),
+    max_hits: int = typer.Option(5, min=1),
+) -> None:
+    """Query project retrieval."""
+    from ai_local.indexer.project import refresh_and_retrieve_project
+    from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
+    result = refresh_and_retrieve_project(
+        query,
+        root,
+        KnowledgeIndexStore(knowledge_db),
+        chunk_lines=chunk_lines,
+        max_hits=max_hits,
+    )
+    typer.echo(
+        f"INDEX indexed={len(result.batch.documents)} "
+        f"unchanged={len(result.batch.unchanged_paths)} "
+        f"skipped={len(result.batch.skipped_paths)}"
+    )
+    typer.echo(
+        f"RETRIEVE decision={result.package.decision} "
+        f"hits={len(result.package.selected_hits)}"
+    )
+    for ref in result.package.evidence_refs:
+        typer.echo(f"EVIDENCE {ref}")
+
+
+@gate_app.command("patch-levels")
+def gate_patch_levels_group(
+    config: Path = typer.Option(Path("configs/patch_levels.yaml")),
+    workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+) -> None:
+    """Validate patch levels configuration."""
+    from ai_local.harness.patch_levels import load_patch_levels, validate_patch_levels
+
+    levels = load_patch_levels(config)
+    errors = validate_patch_levels(levels)
+    if errors:
+        for error in errors:
+            typer.echo(f"FAIL {error}")
+        raise typer.Exit(code=1)
+    for level in levels:
+        typer.echo(
+            f"PASS {level.name} files={level.max_files_changed} "
+            f"lines={level.max_changed_lines} hop={level.max_hop_depth} "
+            f"risk={level.risk_ceiling}"
+        )
+
+
+@gate_app.command("memory-regression")
+def gate_memory_regression_group(
+    max_level: str | None = typer.Option(None),
+    config: Path = typer.Option(Path("configs/memory_regression_gates.yaml")),
+    workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
+) -> None:
+    """Run memory regression gate promotion."""
+    from ai_local.harness.memory_regression_gate import run_memory_regression_promotion
+
+    results = run_memory_regression_promotion(config_path=config, max_level=max_level)
+    failed = False
+    for result in results:
+        status = "PASS" if result.passed else "FAIL"
+        typer.echo(
+            f"{status} {result.level} max_state_hops={result.max_state_hops} "
+            f"checks={len(result.checked_ids)}"
+        )
+        if not result.passed:
+            failed = True
+            typer.echo(result.reason)
+            break
+    if failed:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def init(workspace: Path = typer.Option(Path("."), "--workspace", "-w")) -> None:
     paths = _ensure_workspace(workspace)

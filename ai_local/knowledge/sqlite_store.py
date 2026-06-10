@@ -78,7 +78,20 @@ class SQLiteKnowledgeStore:
             tags_json = json.dumps([tag])
         else:
             tags_json = json.dumps(tag)
+
+        # Duplicate check: prevent same title being inserted twice
         with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id FROM knowledge WHERE title = ? AND kind = 'note'
+                """,
+                (title,),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                raise RuntimeError(f"Knowledge note with title '{title}' already exists (id={existing['id']})")
+
+            # Insert new note
             cursor = conn.execute(
                 """
                 INSERT INTO knowledge (kind, title, content, source_path, tags_json, created_at, updated_at)
@@ -90,6 +103,7 @@ class SQLiteKnowledgeStore:
             conn.commit()
             if entry_id is None:
                 raise RuntimeError("Failed to insert note knowledge")
+
             return KnowledgeEntry(
                 id=entry_id,
                 kind="note",
@@ -107,6 +121,10 @@ class SQLiteKnowledgeStore:
             return [KnowledgeEntry(**dict(r)) for r in rows]
 
     def search(self, query: str) -> list[KnowledgeEntry]:
+        """Search knowledge with relevance ranking.
+
+        Returns results sorted by relevance score (higher = more relevant).
+        """
         words = [w for w in query.replace("?", "").split() if len(w) > 3 or w.lower() in ("ai",)]
         if not words:
             words = query.split()
@@ -127,4 +145,28 @@ class SQLiteKnowledgeStore:
                 f"SELECT * FROM knowledge WHERE {where_clause} ORDER BY id",
                 tuple(params),
             ).fetchall()
-            return [KnowledgeEntry(**dict(r)) for r in rows]
+            entries = [KnowledgeEntry(**dict(r)) for r in rows]
+
+            # Rank by relevance in Python: tag match > title match > content match > file kind
+            def _rank(entry: KnowledgeEntry) -> tuple:
+                q_lower = query.lower()
+                score = 0
+                if entry.tags_json and q_lower in entry.tags_json.lower():
+                    score = 3
+                elif entry.title and q_lower in entry.title.lower():
+                    score = 2
+                # Check word-level match
+                for w in words:
+                    w_lower = w.lower()
+                    if entry.tags_json and w_lower in entry.tags_json.lower():
+                        score = max(score, 3)
+                    elif entry.title and w_lower in entry.title.lower():
+                        score = max(score, 2)
+                    elif entry.content and w_lower in entry.content.lower():
+                        score = max(score, 1)
+                # Penalize 'file' kind vs 'note' kind
+                kind_penalty = 1 if entry.kind == 'file' else 0
+                return (-score, kind_penalty, entry.id)
+
+            entries.sort(key=_rank)
+            return entries

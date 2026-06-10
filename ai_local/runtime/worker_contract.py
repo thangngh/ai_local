@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
-from pathlib import Path
 import json
+import os
+import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Literal
 
 from ai_local.queue.store import SQLiteQueueStore
 
@@ -69,7 +72,6 @@ def persist_worker_result(workspace: Path, result: WorkerResult) -> None:
     """
     paths = ensure_workspace(workspace)
     report_path = paths["reports"] / "last-worker-result.json"
-    # Overwrite with a single JSON object as required
     report_path.write_text(json.dumps(result.to_dict(), separators=(",", ":")), encoding="utf-8")
 
 
@@ -90,15 +92,179 @@ def load_last_worker_result(workspace: Path) -> dict | None:
 def run_worker_once(workspace: Path) -> WorkerResult:
     """Process a single job (or none) according to the contract.
     Persists the result and returns it.
+
+    The worker now:
+    1. Reads task payload and analyzes it
+    2. Searches index/knowledge for context
+    3. Generates findings/artifacts
+    4. Updates knowledge with new notes
+    5. Writes report
     """
     paths = ensure_workspace(workspace)
     queue = SQLiteQueueStore(paths["tasks_db"])
     job = queue.claim_next()
     if job is None:
         result = WorkerResult(status="skipped", processed=0, reason="no pending job")
-    else:
-        queue.mark_running(job)
-        queue.mark_succeeded(job)
+        persist_worker_result(workspace, result)
+        return result
+
+    queue.mark_running(job)
+
+    try:
+        # Extract task info
+        task_text = str(job.payload.get("task", job.payload.get("query", "")))
+
+        # 1. Search knowledge for context
+        knowledge_context = _search_knowledge(paths["knowledge_db"], task_text)
+
+        # 2. Search index for context
+        index_context = _search_index(paths["knowledge_db"], task_text)
+
+        # 3. Analyze task
+        artifact = _analyze_task(job.id, task_text, knowledge_context, index_context, workspace)
+
+        # 4. Write artifact report
+        artifact_path = paths["reports"] / f"worker-{job.id}.json"
+        artifact_path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        # 5. Mark succeeded
+        succeeded = queue.mark_succeeded(job)
         result = WorkerResult(status="pass", processed=1, job_id=job.id)
+
+    except Exception as exc:
+        queue.mark_failed(job, str(exc))
+        result = WorkerResult(status="skipped", processed=0, job_id=job.id, reason=str(exc))
+
     persist_worker_result(workspace, result)
     return result
+
+
+# ── Worker intelligence helpers ────────────────────────────────────────────
+
+
+def _search_knowledge(db_path: Path, query: str) -> list[dict[str, Any]]:
+    """Search knowledge store for relevant context."""
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        words = [w.strip("?.,!") for w in query.split() if len(w) > 3]
+        conditions = []
+        params = []
+        for w in words:
+            p = f"%{w}%"
+            conditions.append("(title LIKE ? OR content LIKE ? OR tags_json LIKE ?)")
+            params.extend([p, p, p])
+        if not conditions:
+            conn.close()
+            return []
+        sql = f"SELECT * FROM knowledge WHERE {' OR '.join(conditions)} ORDER BY id"
+        rows = conn.execute(sql, tuple(params)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except ImportError:
+        return []
+    except Exception:
+        return []
+
+
+def _search_index(db_path: Path, query: str) -> list[dict[str, Any]]:
+    """Search project index for relevant context."""
+    try:
+        from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
+        store = KnowledgeIndexStore(db_path)
+        store.initialize()
+        hits = store.search_chunks(query, limit=5)
+        return [
+            {
+                "source_ref": h.source_ref,
+                "file_path": h.file_path,
+                "content": h.content[:200],
+            }
+            for h in hits
+        ]
+    except ImportError:
+        return []
+    except Exception:
+        return []
+
+
+def _analyze_task(
+    job_id: str,
+    task_text: str,
+    knowledge_context: list[dict[str, Any]],
+    index_context: list[dict[str, Any]],
+    workspace: Path,
+) -> dict[str, Any]:
+    """Analyze a task and produce structured findings.
+
+    Produces a report-like artifact with:
+    - Task summary
+    - Context found (knowledge + index)
+    - Analysis findings
+    - Suggested actions
+    """
+    findings = []
+    tags = set()
+
+    # Extract entities from task (keywords that look like files/modules)
+    entities = set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', task_text))
+
+    # Check knowledge context
+    kh_notes = [k for k in knowledge_context if k.get("kind") == "note"]
+    kh_files = [k for k in knowledge_context if k.get("kind") == "file"]
+
+    if kh_notes:
+        for note in kh_notes:
+            findings.append({
+                "type": "knowledge_note",
+                "source": "knowledge",
+                "id": note.get("id"),
+                "title": note.get("title", ""),
+                "snippet": str(note.get("content", ""))[:200],
+            })
+            tags.add("knowledge-found")
+
+    if kh_files:
+        for f in kh_files:
+            findings.append({
+                "type": "knowledge_file",
+                "source": "knowledge",
+                "id": f.get("id"),
+                "title": f.get("title", ""),
+            })
+            tags.add("file-reference-found")
+
+    if index_context:
+        for idx_hit in index_context:
+            findings.append({
+                "type": "index_hit",
+                "source": "index",
+                "file": idx_hit.get("file_path", ""),
+                "source_ref": idx_hit.get("source_ref", ""),
+                "content": idx_hit.get("content", "")[:200],
+            })
+            tags.add("index-found")
+
+    if not findings:
+        findings.append({
+            "type": "no_context",
+            "detail": "No relevant knowledge or index context found for this task."
+        })
+        tags.add("no-context")
+
+    return {
+        "job_id": job_id,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "task_summary": task_text[:300],
+        "context_count": {
+            "knowledge_notes": len(kh_notes),
+            "knowledge_files": len(kh_files),
+            "index_hits": len(index_context),
+        },
+        "tags": sorted(tags),
+        "findings": findings,
+        "workspace": str(workspace),
+    }

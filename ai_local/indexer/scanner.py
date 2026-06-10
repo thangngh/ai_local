@@ -181,8 +181,25 @@ def _unchanged(previous: IndexManifestEntry | None, current: IndexManifestEntry)
 
 
 def _ignored_path(path: Path) -> bool:
-    ignored = {".git", ".venv", "__pycache__", "node_modules", "dist", "target"}
-    return any(part in ignored for part in path.parts)
+    ignored_prefixes = {
+        ".git",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+        "dist",
+        "target",
+        ".next",
+        ".ai-local",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".reports",
+    }
+    ignored_suffixes = {".pyc", ".pyo", ".egg-info", ".gitkeep"}
+    return (
+        any(part in ignored_prefixes for part in path.parts)
+        or path.suffix.casefold() in ignored_suffixes
+    )
 
 
 def _path_ref(path: Path, root: Path | None) -> str:
