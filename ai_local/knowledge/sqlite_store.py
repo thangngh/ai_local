@@ -2,8 +2,13 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Optional
+
+
+def _content_hash(text: str) -> str:
+    return sha256(text.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -14,8 +19,9 @@ class KnowledgeEntry:
     content: str
     source_path: Optional[str]
     tags_json: str
-    created_at: str
-    updated_at: str
+    content_hash: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
 
 
 class SQLiteKnowledgeStore:
@@ -29,15 +35,21 @@ class SQLiteKnowledgeStore:
                 CREATE TABLE IF NOT EXISTS knowledge (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     kind TEXT NOT NULL,
-                    title TEXT NOT NULL,
+                    title TEXT NOT NULL DEFAULT 'note',
                     content TEXT NOT NULL,
                     source_path TEXT,
                     tags_json TEXT,
+                    content_hash TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
                 """
             )
+            # Add content_hash column to existing tables (migration)
+            try:
+                conn.execute("ALTER TABLE knowledge ADD COLUMN content_hash TEXT")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path)
@@ -52,10 +64,10 @@ class SQLiteKnowledgeStore:
         with self._connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO knowledge (kind, title, content, source_path, tags_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO knowledge (kind, title, content, source_path, tags_json, content_hash, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("file", title, content, str(path), tags_json, now, now),
+                ("file", title, content, str(path), tags_json, _content_hash(content), now, now),
             )
             entry_id = cursor.lastrowid
             conn.commit()
@@ -79,25 +91,29 @@ class SQLiteKnowledgeStore:
         else:
             tags_json = json.dumps(tag)
 
-        # Duplicate check: prevent same title being inserted twice
+        # Duplicate check: prevent same content being inserted twice
         with self._connect() as conn:
+            # Use content hash for reliable dedup
+            content_hash = _content_hash(text)
             cursor = conn.execute(
                 """
-                SELECT id FROM knowledge WHERE title = ? AND kind = 'note'
+                SELECT id FROM knowledge WHERE content_hash = ? AND kind = 'note'
                 """,
-                (title,),
+                (content_hash,),
             )
             existing = cursor.fetchone()
             if existing:
-                raise RuntimeError(f"Knowledge note with title '{title}' already exists (id={existing['id']})")
+                raise RuntimeError(
+                    f"Knowledge note with same content already exists (id={existing['id']})"
+                )
 
             # Insert new note
             cursor = conn.execute(
                 """
-                INSERT INTO knowledge (kind, title, content, source_path, tags_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO knowledge (kind, title, content, source_path, tags_json, content_hash, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("note", title, text, None, tags_json, now, now),
+                ("note", title, text, None, tags_json, _content_hash(text), now, now),
             )
             entry_id = cursor.lastrowid
             conn.commit()

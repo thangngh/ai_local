@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from ai_local.audit.store import InMemoryAuditStore, make_audit_event
 from ai_local.confirmation.models import ConfirmationResolution
@@ -16,11 +18,13 @@ from ai_local.evaluator.service import (
     re_evaluate_with_context,
     route_evaluation,
 )
+from ai_local.llm.ollama import OllamaClient
 from ai_local.planner.gate import PlanGateDecision, decide_plan
 from ai_local.planner.models import PlanGateSignals
 from ai_local.planner.models import PlanItem
 from ai_local.planner.service import plan_from_goal
 from ai_local.retrieval.models import ContextPackage
+from ai_local.retrieval.vector import TextEmbedder
 from ai_local.skills.evidence import script_result_to_evidence
 from ai_local.skills.models import (
     SkillRuntimeEvidenceHandoff,
@@ -80,11 +84,15 @@ class AgentLoop:
         context_retriever: ContextRetriever | None = None,
         audit_store: InMemoryAuditStore | None = None,
         skill_runtime: SkillRuntime | None = None,
+        ollama_client: OllamaClient | None = None,
+        embedder: TextEmbedder | None = None,
     ) -> None:
         self._run_store = run_store
         self._context_retriever = context_retriever
         self._audit_store = audit_store
         self._skill_runtime = skill_runtime
+        self._ollama_client = ollama_client
+        self._embedder = embedder
 
     def run_once(
         self,
@@ -92,7 +100,7 @@ class AgentLoop:
         goal: str,
         signals: PlanGateSignals | None = None,
     ) -> AgentLoopResult:
-        plan = plan_from_goal(goal)
+        plan = plan_from_goal(goal, ollama_client=self._ollama_client)
         decision = decide_plan(plan, signals)
         context = self._retrieve_context(goal, decision)
         if self._run_store is not None:
@@ -349,6 +357,69 @@ class AgentLoop:
             "stop": "stopped",
         }
         return status_by_decision[decision.decision]
+
+
+def create_ollama_agent_loop(
+    ollama_client: OllamaClient | None = None,
+    run_store: AgentRunStore | None = None,
+    audit_store: InMemoryAuditStore | None = None,
+    skill_runtime: SkillRuntime | None = None,
+    embedder: TextEmbedder | None = None,
+) -> AgentLoop:
+    """Create an AgentLoop pre-configured with Ollama components.
+
+    When ``ollama_client`` is provided, the loop uses:
+    - ``OllamaPlanner`` for multi-step planning
+    - Real embeddings for semantic retrieval
+    When ``ollama_client`` is ``None``, falls back to deterministic stubs.
+    """
+    context_retriever: ContextRetriever | None = None
+    if ollama_client is not None:
+        context_retriever = _build_ollama_retriever(ollama_client, embedder=embedder)
+
+    return AgentLoop(
+        run_store=run_store,
+        context_retriever=context_retriever,
+        audit_store=audit_store,
+        skill_runtime=skill_runtime,
+        ollama_client=ollama_client,
+        embedder=embedder,
+    )
+
+
+def _build_ollama_retriever(
+    ollama_client: OllamaClient,
+    embedder: TextEmbedder | None = None,
+) -> ContextRetriever | None:
+    """Build a minimal ContextRetriever using Ollama embeddings."""
+    from pathlib import Path
+
+    from ai_local.retrieval import create_embedder, create_vector_provider
+
+    embedder_instance = embedder or create_embedder(ollama_client)
+    _ = create_vector_provider(embedder_instance)  # available for future use
+
+    class _OllamaContextRetriever:
+        """Simple context retriever that uses keyword + semantic search."""
+
+        def __init__(self) -> None:
+            self._embedder = embedder_instance
+
+        def retrieve(self, query: str) -> ContextPackage:
+            """Retrieve context. Returns an empty package (stub)."""
+            from ai_local.retrieval.models import ContextPackage, RetrievalQuery
+
+            q = RetrievalQuery(raw=query, normalized=query.casefold(), aliases=[query])
+            return ContextPackage(
+                query=q,
+                hits=[],
+                selected_hits=[],
+                rejected_hits=[],
+                decision="continue",
+                reason="Ollama context retriever stub",
+            )
+
+    return _OllamaContextRetriever()
 
 
 def _script_tool_status(

@@ -130,6 +130,24 @@ class OllamaClient:
             eval_duration_ns=eval_duration_ns,
         )
 
+    def embed(
+        self,
+        text: str,
+        model: str | None = None,
+    ) -> list[float]:
+        """Get embedding vector for text via Ollama /api/embeddings."""
+        target = model or "nomic-embed-text:latest"
+        payload = self._request(
+            "POST",
+            "/api/embeddings",
+            payload={"model": target, "prompt": text},
+        )
+        embedding = payload.get("embedding", [])
+        if not isinstance(embedding, list):
+            msg = f"Ollama returned non-list embedding for model {target}"
+            raise OllamaError(msg)
+        return [float(v) for v in embedding]
+
     def _request(self, method: str, path: str, payload: dict[str, Any] | None) -> dict[str, Any]:
         url = f"{self._base}{path}"
         data = None

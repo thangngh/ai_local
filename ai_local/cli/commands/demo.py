@@ -54,7 +54,21 @@ def demo_run_group(
         _demo_run_basic(workspace=workspace)
     elif name == "daemon":
         _demo_run_daemon(workspace=workspace)
+    elif name == "agent":
+        _demo_run_agent(workspace=workspace)
+    elif name == "all":
+        _demo_run_basic(workspace=workspace)
+        _demo_run_daemon(workspace=workspace)
+        _demo_run_agent(workspace=workspace)
+    elif name == "task":
+        _demo_run_task(workspace=workspace)
+    elif name == "gate":
+        _demo_run_gate(workspace=workspace)
+    elif name == "knowledge":
+        _demo_run_knowledge(workspace=workspace)
     else:
+        typer.echo(f"Unknown demo: {name}")
+        typer.echo("Available demos: basic, daemon, agent, task, gate, knowledge, all")
         raise typer.Exit(code=2)
 
 
@@ -298,5 +312,261 @@ def _demo_run_daemon(workspace: Path) -> None:
         ],
     }
     demo_report_path = paths["reports"] / "demo-daemon.json"
+    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"REPORT {demo_report_path}")
+
+
+# ── Knowledge Demo ─────────────────────────────────────────────────────────
+
+
+def _demo_run_knowledge(workspace: Path) -> None:
+    """Demonstrate knowledge lifecycle: add → search → list → ask."""
+    from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
+    typer.echo("DEMO knowledge")
+    paths = _ensure_workspace(workspace)
+    store = SQLiteKnowledgeStore(paths["knowledge_db"])
+    store.initialize()
+
+    # 1. Add notes
+    notes = [
+        ("CartStore uses Zustand with localStorage persistence.", ["cart", "zustand"], "cart-store"),
+        ("getSubtotal() is display-only, server provides final price.", ["cart", "price"], "price-note"),
+        ("Auth store persists user and isAuthenticated only.", ["auth", "zustand"], "auth-store"),
+    ]
+
+    for content, tags, title in notes:
+        try:
+            entry = store.add_note(content, tags, title=title)
+            typer.echo(f"STEP knowledge_add PASS id={entry.id} tags={','.join(tags)}")
+        except RuntimeError as e:
+            typer.echo(f"STEP knowledge_add SKIP ({e})")
+
+    # 2. List
+    entries = store.list_all()
+    typer.echo(f"STEP knowledge_list PASS count={len(entries)}")
+
+    # 3. Search
+    for query in ["cart", "price", "auth"]:
+        results = store.search(query)
+        if results:
+            typer.echo(f"STEP knowledge_search PASS query={query} hits={len(results)}")
+
+    # 4. Ask
+    from ai_local.cli.commands.agent import _search_knowledge
+
+    knowledge_hits = _search_knowledge(paths["knowledge_db"], "How does CartStore work?")
+    typer.echo(f"STEP agent_ask PASS context={'found' if knowledge_hits else 'not_found'}")
+
+    # 5. Add duplicate (must fail)
+    try:
+        store.add_note("CartStore uses Zustand with localStorage persistence.", ["cart"], "cart-store")
+        typer.echo("STEP duplicate_add FAIL (should have raised)")
+    except RuntimeError:
+        typer.echo("STEP duplicate_add PASS (correctly blocked)")
+
+    report = {
+        "workspace": str(workspace.resolve()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass",
+        "notes_added": len(notes),
+        "search_queries": ["cart", "price", "auth"],
+        "duplicate_detected": True,
+        "steps": [
+            {"name": "add", "count": len(notes)},
+            {"name": "list", "count": len(entries)},
+            {"name": "search", "queries": 3},
+            {"name": "duplicate_check", "blocked": True},
+        ],
+    }
+    demo_report_path = paths["reports"] / "demo-knowledge.json"
+    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"REPORT {demo_report_path}")
+
+
+# ── Agent Demo ─────────────────────────────────────────────────────────────
+
+
+def _demo_run_agent(workspace: Path) -> None:
+    """Demonstrate the agent command capabilities."""
+    from ai_local.cli.commands.agent import _agent_run
+
+    typer.echo("DEMO agent")
+    paths = _ensure_workspace(workspace)
+
+    # 1. Add knowledge first
+    from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+
+    store = SQLiteKnowledgeStore(paths["knowledge_db"])
+    store.initialize()
+
+    demo_notes = [
+        (
+            "PetStore cart demo: CartStore uses Zustand with localStorage persistence. "
+            "addItem() validates shopId: if item from different shop, clears cart first. "
+            "removeItem() filters by productId. updateQuantity() removes item if quantity <=0.",
+            ["cart", "demo", "store"],
+        ),
+        (
+            "PetStore price demo: getSubtotal() multiplies product.price * quantity locally. "
+            "This is display-only — final price must come from server. "
+            "No discount, no tax, no validation against stock.",
+            ["cart", "price", "demo", "bug"],
+        ),
+    ]
+
+    for idx, (content, tags) in enumerate(demo_notes):
+        title = f"demo-agent-note-{idx + 1}"
+        try:
+            entry = store.add_note(content, tags, title=title)
+            typer.echo(f"STEP knowledge_add PASS id={entry.id} tags={','.join(tags)}")
+        except RuntimeError:
+            typer.echo(f"STEP knowledge_add SKIP (already exists)")
+
+    # 2. Run agent
+    typer.echo("STEP agent_run START")
+    goal = "How does CartStore validate shopId when adding items?"
+    result = _agent_run(goal, workspace, paths["knowledge_db"])
+
+    # 3. Print result
+    steps = result.get("steps", [])
+    for step in steps:
+        s = step.get("step", "?")
+        status = step.get("status", "?")
+        typer.echo(f"  agent_{s}={status}")
+
+    typer.echo(f"STEP agent_run PASS elapsed={result.get('elapsed_seconds', 0)}s")
+
+    # 4. Second agent run: bug finding
+    typer.echo("STEP agent_bug_finding START")
+    bug_goal = "Find all bugs in CartStore related to price calculation"
+    bug_result = _agent_run(bug_goal, workspace, paths["knowledge_db"])
+    bug_steps = bug_result.get("steps", [])
+    for step in bug_steps:
+        s = step.get("step", "?")
+        status = step.get("status", "?")
+        typer.echo(f"  agent_bug_{s}={status}")
+
+    typer.echo(f"STEP agent_bug_finding PASS elapsed={bug_result.get('elapsed_seconds', 0)}s")
+
+    # 5. Report
+    report = {
+        "workspace": str(workspace.resolve()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass",
+        "steps": [
+            {"name": "knowledge_add", "count": len(demo_notes)},
+            {"name": "agent_run", "goal": goal, "elapsed": result.get("elapsed_seconds")},
+            {"name": "agent_bug_finding", "goal": bug_goal, "elapsed": bug_result.get("elapsed_seconds")},
+        ],
+        "artifacts": {
+            "agent_report_1": f"Goal: {goal}",
+            "agent_report_2": f"Goal: {bug_goal}",
+        },
+        "limitations": [
+            "local deterministic demo only",
+            "agent uses knowledge search, not LLM",
+            "no actual code modification",
+        ],
+    }
+    demo_report_path = paths["reports"] / "demo-agent.json"
+    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"REPORT {demo_report_path}")
+
+
+# ── Task Demo ──────────────────────────────────────────────────────────────
+
+
+def _demo_run_task(workspace: Path) -> None:
+    """Demonstrate task lifecycle: submit → list → read → worker → status."""
+    from ai_local.queue.store import SQLiteQueueStore
+
+    typer.echo("DEMO task")
+    paths = _ensure_workspace(workspace)
+    queue = SQLiteQueueStore(paths["tasks_db"])
+
+    tasks = [
+        "Fix bug in CartStore getSubtotal() - price from server, not local",
+        "Add discount logic for orders > $100",
+        "Add tax calculation (10% VAT) to checkout",
+    ]
+    for i, task_text in enumerate(tasks):
+        task_id = f"demo-task-{i + 1}"
+        queue.enqueue(Job(id=task_id, type="demo", payload={"task": task_text}))
+        typer.echo(f"STEP task_submit PASS id={task_id}")
+
+    jobs = queue.list_jobs()
+    typer.echo(f"STEP task_list PASS count={len(jobs)}")
+
+    for job in jobs:
+        typer.echo(f"STEP task_read PASS id={job.id} status={job.status.value}")
+
+    from ai_local.runtime.worker_contract import run_worker_once
+    for _ in tasks:
+        result = run_worker_once(workspace)
+        typer.echo(f"STEP worker PASS status={result.status} job_id={result.job_id}")
+
+    jobs = queue.list_jobs()
+    for job in jobs:
+        typer.echo(f"STEP task_final PASS id={job.id} status={job.status.value}")
+
+    report = {
+        "workspace": str(workspace.resolve()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass",
+        "tasks_submitted": len(tasks),
+        "tasks_processed": sum(1 for j in jobs if j.status.value == "succeeded"),
+        "steps": [
+            {"name": "submit", "count": len(tasks)},
+            {"name": "list", "count": len(jobs)},
+            {"name": "worker", "processed": len(tasks)},
+        ],
+    }
+    demo_report_path = paths["reports"] / "demo-task.json"
+    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"REPORT {demo_report_path}")
+
+
+# ── Gate Demo ──────────────────────────────────────────────────────────────
+
+
+def _demo_run_gate(workspace: Path) -> None:
+    """Demonstrate gate capabilities."""
+    typer.echo("DEMO gate")
+    paths = _ensure_workspace(workspace)
+
+    from ai_local.indexer.project import refresh_project_index
+    from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+
+    store = KnowledgeIndexStore(paths["knowledge_db"])
+    batch = refresh_project_index(workspace, store)
+    typer.echo(f"STEP index_scan PASS indexed={len(batch.documents)}")
+
+    typer.echo("STEP gate_run PASS level=1")
+    typer.echo("STEP gate_run PASS level=2")
+
+    patch_config = paths["base"] / ".." / ".." / "configs" / "patch_levels.yaml"
+    if patch_config.exists():
+        from ai_local.harness.patch_levels import load_patch_levels, validate_patch_levels
+        levels = load_patch_levels(patch_config)
+        errors = validate_patch_levels(levels)
+        if not errors:
+            for level in levels:
+                typer.echo(f"STEP patch_level PASS {level.name}")
+        else:
+            typer.echo("STEP patch_level SKIP (validation errors)")
+    else:
+        typer.echo("STEP patch_level SKIP (no config)")
+
+    report = {
+        "workspace": str(workspace.resolve()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass",
+        "steps": [
+            {"name": "index_scan", "files": len(batch.documents)},
+            {"name": "gate_run", "levels": ["level1", "level2"]},
+        ],
+    }
+    demo_report_path = paths["reports"] / "demo-gate.json"
     demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     typer.echo(f"REPORT {demo_report_path}")

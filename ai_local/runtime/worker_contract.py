@@ -1,3 +1,13 @@
+"""Worker contract — processes a single job with optional LLM enhancement.
+
+The worker:
+1. Claims a job from the queue
+2. Searches knowledge + index for context
+3. Analyzes the task (deterministic or LLM-based)
+4. Optionally applies code changes via tool execution
+5. Writes artifact report
+6. Marks job succeeded/failed
+"""
 from __future__ import annotations
 
 import json
@@ -8,7 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from ai_local.llm.ollama import OllamaClient, OllamaError
 from ai_local.queue.store import SQLiteQueueStore
+from ai_local.tools.registry import ToolRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +45,7 @@ class WorkerResult:
     reason: str | None = None
 
     def to_dict(self) -> dict:
-        """Serialize the result to a JSON‑compatible dict."""
+        """Serialize the result to a JSON-compatible dict."""
         data: dict = {"status": self.status, "processed": self.processed}
         if self.job_id is not None:
             data["job_id"] = self.job_id
@@ -89,16 +101,23 @@ def load_last_worker_result(workspace: Path) -> dict | None:
         return None
 
 
-def run_worker_once(workspace: Path) -> WorkerResult:
+def run_worker_once(
+    workspace: Path,
+    ollama_client: OllamaClient | None = None,
+) -> WorkerResult:
     """Process a single job (or none) according to the contract.
-    Persists the result and returns it.
 
-    The worker now:
+    Args:
+        workspace: The workspace directory.
+        ollama_client: Optional Ollama client for LLM-enhanced analysis.
+
+    The worker:
     1. Reads task payload and analyzes it
     2. Searches index/knowledge for context
     3. Generates findings/artifacts
-    4. Updates knowledge with new notes
-    5. Writes report
+    4. Optionally applies code changes (when LLM + tool registry available)
+    5. Updates knowledge with new notes
+    6. Writes report
     """
     paths = ensure_workspace(workspace)
     queue = SQLiteQueueStore(paths["tasks_db"])
@@ -120,14 +139,26 @@ def run_worker_once(workspace: Path) -> WorkerResult:
         # 2. Search index for context
         index_context = _search_index(paths["knowledge_db"], task_text)
 
-        # 3. Analyze task
-        artifact = _analyze_task(job.id, task_text, knowledge_context, index_context, workspace)
+        # 3. Analyze task (deterministic or LLM-based)
+        artifact = _analyze_task(
+            job.id, task_text, knowledge_context, index_context,
+            workspace, ollama_client=ollama_client,
+        )
 
-        # 4. Write artifact report
+        # NOTE: Code changes are NOT applied automatically.
+        # The LLM generates suggestions only — user reviews and decides.
+        # See ai-local-control-principle.md (memory).
+        if artifact.get("code_changes"):
+            artifact["code_changes_note"] = (
+                "These changes are suggestions for user review. "
+                "They have NOT been applied."
+            )
+
+        # 5. Write artifact report
         artifact_path = paths["reports"] / f"worker-{job.id}.json"
         artifact_path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        # 5. Mark succeeded
+        # 6. Mark succeeded
         succeeded = queue.mark_succeeded(job)
         result = WorkerResult(status="pass", processed=1, job_id=job.id)
 
@@ -197,14 +228,19 @@ def _analyze_task(
     knowledge_context: list[dict[str, Any]],
     index_context: list[dict[str, Any]],
     workspace: Path,
+    ollama_client: OllamaClient | None = None,
 ) -> dict[str, Any]:
     """Analyze a task and produce structured findings.
 
-    Produces a report-like artifact with:
+    Uses LLM when available for deeper analysis, including code change
+    suggestions (file path, original snippet, replacement snippet).
+
+    Returns a report-like artifact with:
     - Task summary
     - Context found (knowledge + index)
     - Analysis findings
-    - Suggested actions
+    - Suggested actions / code changes
+    - Tool execution results
     """
     findings = []
     tags = set()
@@ -251,14 +287,34 @@ def _analyze_task(
     if not findings:
         findings.append({
             "type": "no_context",
-            "detail": "No relevant knowledge or index context found for this task."
+            "detail": "No relevant knowledge or index context found for this task.",
         })
         tags.add("no-context")
 
-    return {
+    # LLM-based code change generation
+    code_changes: list[dict[str, Any]] | None = None
+    llm_analysis: str | None = None
+    llm_reasoning: str | None = None
+
+    if ollama_client is not None:
+        try:
+            llm_result = _llm_analyze_task(
+                ollama_client, task_text, kh_notes, index_context,
+            )
+            code_changes = llm_result.get("changes", [])
+            llm_analysis = llm_result.get("analysis", "")
+            llm_reasoning = llm_result.get("reasoning", "")
+            if code_changes:
+                tags.add("llm-changes-generated")
+        except (OllamaError, json.JSONDecodeError) as exc:
+            llm_reasoning = f"LLM analysis failed: {exc}"
+
+    # Build artifact
+    artifact: dict[str, Any] = {
         "job_id": job_id,
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "task_summary": task_text[:300],
+        "llm_used": ollama_client is not None,
         "context_count": {
             "knowledge_notes": len(kh_notes),
             "knowledge_files": len(kh_files),
@@ -268,3 +324,70 @@ def _analyze_task(
         "findings": findings,
         "workspace": str(workspace),
     }
+
+    if llm_analysis is not None:
+        artifact["llm_analysis"] = llm_analysis
+    if llm_reasoning is not None:
+        artifact["llm_reasoning"] = llm_reasoning
+    if code_changes is not None:
+        artifact["code_changes"] = code_changes
+
+    return artifact
+
+
+def _llm_analyze_task(
+    client: OllamaClient,
+    task: str,
+    knowledge_notes: list[dict[str, Any]],
+    index_hits: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Use LLM to analyze a task and propose code changes.
+
+    Expected return structure::
+        {
+            "analysis": "Summary of the task...",
+            "reasoning": "Step-by-step reasoning...",
+            "changes": [
+                {
+                    "file": "relative/path/to/file",
+                    "description": "What to change",
+                    "original_snippet": "code to replace",
+                    "new_snippet": "replacement code"
+                }
+            ]
+        }
+    """
+    system = (
+        "You are a senior software engineer analyzing a coding task. "
+        "Given the task description, relevant knowledge notes, and code context, "
+        "provide a structured analysis. "
+        "Return ONLY a JSON object with these keys: "
+        '"analysis" (str), "reasoning" (str), "changes" (list of objects). '
+        "Each change object must have: "
+        '"file" (str), "description" (str), '
+        '"original_snippet" (str), "new_snippet" (str). '
+        "If no code changes are needed, return empty changes list. "
+        "No markdown, no explanation outside JSON."
+    )
+    user = json.dumps({
+        "task": task[:2000],
+        "knowledge_notes": [
+            {"title": n.get("title", "?"), "content": str(n.get("content", ""))[:300]}
+            for n in knowledge_notes[:5]
+        ],
+        "code_context": [
+            {"file": h.get("file_path", "?"), "content": h.get("content", "")[:300]}
+            for h in index_hits[:5]
+        ],
+    })
+
+    result = client.chat(system=system, user=user)
+    raw = result.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+        raw = raw.rsplit("```", 1)[0]
+
+    parsed: dict[str, Any] = json.loads(raw)
+    if "changes" not in parsed:
+        parsed["changes"] = []
+    return parsed
