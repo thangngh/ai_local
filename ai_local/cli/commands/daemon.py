@@ -4,12 +4,14 @@ import typer
 from pathlib import Path
 from typing import Optional
 
+from ai_local.llm.ollama import OllamaError
 from ai_local.runtime.daemon_contract import (
     append_daemon_log,
     daemon_lock_ok,
     daemon_timestamp,
     run_daemon_loop,
 )
+from ai_local.runtime.ollama_worker import build_worker_ollama_client
 from ai_local.runtime.worker_contract import ensure_workspace, run_worker_once
 
 daemon_app = typer.Typer()
@@ -23,6 +25,9 @@ def daemon_run(
     poll_interval: float = typer.Option(0.1, "--poll-interval"),
     max_iterations: Optional[int] = typer.Option(None, "--max-iterations"),
     force: bool = typer.Option(False, "--force"),
+    ollama: bool = typer.Option(False, "--ollama", help="Use Ollama to generate code_change proposals."),
+    ollama_model: str | None = typer.Option(None, "--ollama-model"),
+    ollama_base_url: str | None = typer.Option(None, "--ollama-base-url"),
 ) -> None:
     """Run the daemon.
 
@@ -33,6 +38,18 @@ def daemon_run(
     """
     ensure_workspace(workspace)
     mode = "loop" if loop else "once"
+    try:
+        ollama_client = build_worker_ollama_client(
+            workspace=workspace,
+            enabled=ollama,
+            model=ollama_model,
+            base_url=ollama_base_url,
+        )
+    except OllamaError as exc:
+        typer.echo(f"DAEMON ollama FAIL reason=\"{exc}\"")
+        raise typer.Exit(code=1) from exc
+    if ollama_client is not None:
+        typer.echo(f"DAEMON ollama model={ollama_client.model}")
 
     # --- lock check ---------------------------------------------------------
     if not daemon_lock_ok(workspace, force=force):
@@ -42,7 +59,7 @@ def daemon_run(
     # --- once mode ----------------------------------------------------------
     if once:
         typer.echo("DAEMON run mode=once")
-        result = run_worker_once(workspace)
+        result = run_worker_once(workspace, ollama_client=ollama_client)
         if result.status == "pass":
             typer.echo(
                 f"WORKER once PASS processed={result.processed} "
@@ -80,6 +97,7 @@ def daemon_run(
         poll_interval=poll_interval,
         max_iterations=max_iterations,
         emit_line=typer.echo,
+        ollama_client=ollama_client,
     )
     typer.echo(f"LOG {_log_path(workspace)}")
 

@@ -66,9 +66,11 @@ def demo_run_group(
         _demo_run_gate(workspace=workspace)
     elif name == "knowledge":
         _demo_run_knowledge(workspace=workspace)
+    elif name == "pet-store":
+        _demo_run_pet_store(workspace=workspace)
     else:
         typer.echo(f"Unknown demo: {name}")
-        typer.echo("Available demos: basic, daemon, agent, task, gate, knowledge, all")
+        typer.echo("Available demos: basic, daemon, agent, task, gate, knowledge, pet-store, all")
         raise typer.Exit(code=2)
 
 
@@ -568,5 +570,118 @@ def _demo_run_gate(workspace: Path) -> None:
         ],
     }
     demo_report_path = paths["reports"] / "demo-gate.json"
+    demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"REPORT {demo_report_path}")
+
+
+def _demo_run_pet_store(workspace: Path) -> None:
+    """Run an offline pet-store happy path without Ollama or Windows Service."""
+    from ai_local.indexer.project import rebuild_project_index
+    from ai_local.indexer.sqlite_store import KnowledgeIndexStore
+    from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
+    from ai_local.queue.lifecycle import (
+        apply_task,
+        approve_task,
+        propose_task_deterministic,
+        validate_task,
+    )
+
+    typer.echo("DEMO pet-store")
+    paths = _ensure_workspace(workspace)
+
+    cart_file = workspace / "src" / "store" / "cart.store.ts"
+    if not cart_file.is_file():
+        typer.echo(f"STEP preflight FAIL missing={cart_file}")
+        raise typer.Exit(code=1)
+    typer.echo("STEP preflight PASS")
+
+    index_store = KnowledgeIndexStore(paths["knowledge_db"])
+    batch = rebuild_project_index(workspace, index_store)
+    typer.echo(f"STEP index_rebuild PASS indexed={len(batch.documents)}")
+
+    knowledge = SQLiteKnowledgeStore(paths["knowledge_db"])
+    knowledge.initialize()
+    try:
+        note = knowledge.add_note(
+            "Pet-store CartStore getSubtotal is display-only; final pricing, discounts, and tax must be validated by server/mock API.",
+            ["demo", "pet-store", "cart", "price"],
+            title="demo:pet-store-cart-pricing",
+        )
+        note_mode = f"created id={note.id}"
+    except RuntimeError:
+        note_mode = "reused"
+    typer.echo(f"STEP knowledge_note PASS mode={note_mode}")
+
+    queue = SQLiteQueueStore(paths["tasks_db"])
+    task_id = f"pet-store-demo-{len(queue.list_jobs()) + 1}"
+    queue.enqueue(
+        Job(
+            id=task_id,
+            type="demo",
+            priority=0,
+            payload={"task": "Patch cart getSubtotal demo note for pet-store pricing contract"},
+        )
+    )
+    typer.echo(f"STEP task_submit PASS id={task_id}")
+
+    worker = run_worker_once(workspace)
+    typer.echo(f"STEP worker PASS status={worker.status} job_id={worker.job_id}")
+
+    proposed = propose_task_deterministic(
+        workspace=workspace,
+        tasks_db=paths["tasks_db"],
+        reports_dir=paths["reports"],
+        job_id=task_id,
+    )
+    typer.echo(f"STEP propose {proposed.decision.upper()} changes={proposed.details.get('changes', 0)}")
+    if proposed.decision == "denied":
+        raise typer.Exit(code=1)
+
+    approved = approve_task(tasks_db=paths["tasks_db"], reports_dir=paths["reports"], job_id=task_id)
+    typer.echo(f"STEP approve {approved.decision.upper()}")
+    if approved.decision == "denied":
+        raise typer.Exit(code=1)
+
+    applied = apply_task(workspace=workspace, tasks_db=paths["tasks_db"], reports_dir=paths["reports"], job_id=task_id)
+    typer.echo(f"STEP apply {applied.decision.upper()}")
+    if applied.decision == "denied":
+        raise typer.Exit(code=1)
+
+    validated = validate_task(
+        workspace=workspace,
+        tasks_db=paths["tasks_db"],
+        reports_dir=paths["reports"],
+        job_id=task_id,
+    )
+    typer.echo(f"STEP validate {validated.decision.upper()}")
+    if validated.decision == "denied":
+        raise typer.Exit(code=1)
+
+    report = {
+        "workspace": str(workspace.resolve()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass",
+        "task_id": task_id,
+        "steps": [
+            {"name": "preflight", "status": "pass"},
+            {"name": "index_rebuild", "status": "pass", "indexed": len(batch.documents)},
+            {"name": "knowledge_note", "status": "pass", "mode": note_mode},
+            {"name": "task_submit", "status": "pass", "task_id": task_id},
+            {"name": "worker", "status": worker.status, "job_id": worker.job_id},
+            {"name": "propose", "status": proposed.decision, "changes": proposed.details.get("changes", 0)},
+            {"name": "approve", "status": approved.decision},
+            {"name": "apply", "status": applied.decision, "files": applied.details.get("files", [])},
+            {"name": "validate", "status": validated.decision},
+        ],
+        "artifacts": {
+            "worker_report": str(paths["reports"] / f"worker-{task_id}.json"),
+            "demo_report": str(paths["reports"] / "demo-pet-store.json"),
+        },
+        "limitations": [
+            "offline deterministic proposal",
+            "manual validation record only; run npm lint/build separately for full project validation",
+        ],
+    }
+    demo_report_path = paths["reports"] / "demo-pet-store.json"
     demo_report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     typer.echo(f"REPORT {demo_report_path}")

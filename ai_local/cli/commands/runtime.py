@@ -34,13 +34,22 @@ def _build_runtime_snapshot_report(
     report: dict = {
         "tasks_total": (
             counts.get("pending", 0)
+            + counts.get("claimed", 0)
             + counts.get("running", 0)
+            + counts.get("proposal_ready", 0)
+            + counts.get("awaiting_approval", 0)
+            + counts.get("approved", 0)
+            + counts.get("applied", 0)
+            + counts.get("validated", 0)
             + counts.get("succeeded", 0)
             + counts.get("failed", 0)
             + counts.get("cancelled", 0)
             + counts.get("dead_letter", 0)
         ),
         "tasks_pending": counts.get("pending", 0),
+        "tasks_proposal_ready": counts.get("proposal_ready", 0),
+        "tasks_approved": counts.get("approved", 0),
+        "tasks_validated": counts.get("validated", 0),
         "tasks_done": counts.get("succeeded", 0),
         "tasks_cancelled": counts.get("cancelled", 0),
         "last_worker_result": last_result if last_result is not None else None,

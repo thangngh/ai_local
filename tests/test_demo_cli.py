@@ -131,3 +131,74 @@ def test_ask_low_context(tmp_path: Path) -> None:
     import json
     report_data = json.loads(reports[0].read_text(encoding="utf-8"))
     assert report_data["decision"] == "low_context"
+
+
+def test_knowledge_dedup_remove_cleanup_and_stats(tmp_path: Path) -> None:
+    runner = CliRunner()
+    runner.invoke(app, ["init", "--workspace", str(tmp_path)])
+
+    first = runner.invoke(
+        app,
+        ["knowledge", "add-note", "CartStore validates shopId", "--tag", "cart,validation", "--workspace", str(tmp_path)],
+    )
+    duplicate = runner.invoke(
+        app,
+        ["knowledge", "add-note", "CartStore validates shopId  ", "--tag", "cart,validation", "--workspace", str(tmp_path)],
+    )
+    stats = runner.invoke(app, ["knowledge", "stats", "--workspace", str(tmp_path)])
+    remove = runner.invoke(app, ["knowledge", "remove", "1", "--workspace", str(tmp_path)])
+    cleanup = runner.invoke(app, ["knowledge", "cleanup", "--dedup", "--workspace", str(tmp_path)])
+
+    assert first.exit_code == 0, first.output
+    assert duplicate.exit_code != 0, duplicate.output
+    assert "KNOWLEDGE note rejected" in duplicate.output
+    assert stats.exit_code == 0, stats.output
+    assert "notes=1" in stats.output
+    assert remove.exit_code == 0, remove.output
+    assert cleanup.exit_code == 0, cleanup.output
+
+
+def test_ask_prefers_relevant_note_over_readme_file(tmp_path: Path) -> None:
+    runner = CliRunner()
+    runner.invoke(app, ["init", "--workspace", str(tmp_path)])
+    runner.invoke(
+        app,
+        ["knowledge", "add-note", "This is a Next.js project bootstrapped with create-next-app.", "--tag", "readme", "--workspace", str(tmp_path)],
+    )
+    runner.invoke(
+        app,
+        ["knowledge", "add-note", "CartStore getSubtotal is display-only; final price must come from server.", "--tag", "cart,price,bug", "--workspace", str(tmp_path)],
+    )
+
+    result = runner.invoke(
+        app,
+        ["ask", "Why is CartStore getSubtotal display-only?", "--workspace", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "CartStore getSubtotal" in result.output
+    assert "create-next-app" not in result.output
+
+
+def test_demo_run_pet_store_offline_happy_path(tmp_path: Path) -> None:
+    runner = CliRunner()
+    cart_store = tmp_path / "src" / "store"
+    cart_store.mkdir(parents=True)
+    (cart_store / "cart.store.ts").write_text(
+        "      getSubtotal: () => {\n"
+        "        // NOTE: This is for display only. Final price from server.\n"
+        "        return 0;\n"
+        "      },\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["demo", "run", "pet-store", "--workspace", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "DEMO pet-store" in result.output
+    assert "STEP propose PROPOSED" in result.output
+    assert "STEP apply APPLIED" in result.output
+    assert "STEP validate VALIDATED" in result.output
+    assert (tmp_path / ".ai-local" / "reports" / "demo-pet-store.json").is_file()
+    content = (cart_store / "cart.store.ts").read_text(encoding="utf-8")
+    assert "display-only estimate" in content

@@ -98,7 +98,7 @@ def _run_retriever_case(case: Phase9StressCase, workspace_root: Path) -> Phase9S
         )
 
     store = KnowledgeIndexStore(workspace_root / "knowledge.db")
-    first = refresh_and_retrieve_project(query, workspace_root, store, chunk_lines=chunk_lines)
+    first = refresh_and_retrieve_project(query, workspace_root, store, chunk_lines=chunk_lines, clear_store=True)
     second = refresh_and_retrieve_project(query, workspace_root, store, chunk_lines=chunk_lines)
     metrics: dict[str, int | str] = {
         "first_indexed": len(first.batch.documents),

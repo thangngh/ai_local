@@ -164,6 +164,7 @@ def uninstall_service(workspace: Path) -> str:
 
     Does **not** delete workspace data.
     Returns the stdout from NSSM on success.
+    Idempotent — returns early if service does not exist.
     """
     if not is_windows():
         raise RuntimeError("Windows only")
@@ -172,6 +173,10 @@ def uninstall_service(workspace: Path) -> str:
     except RuntimeError as exc:
         raise RuntimeError(f"Failed to remove service: {exc}") from exc
     if proc.returncode != 0:
+        # NSSM exit code 4+ often means "service does not exist" → idempotent
+        stderr = (proc.stderr or "").strip().lower()
+        if "does not exist" in stderr or "not found" in stderr:
+            return ""
         raise RuntimeError(
             f"NSSM remove failed: {proc.stderr.strip() or proc.stdout.strip()}"
         )

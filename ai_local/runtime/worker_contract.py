@@ -127,7 +127,7 @@ def run_worker_once(
         persist_worker_result(workspace, result)
         return result
 
-    queue.mark_running(job)
+    job = queue.mark_running(job)
 
     try:
         # Extract task info
@@ -154,12 +154,16 @@ def run_worker_once(
                 "They have NOT been applied."
             )
 
+        artifact["execution_state"] = "proposal_ready"
+        artifact["applied"] = False
+
         # 5. Write artifact report
         artifact_path = paths["reports"] / f"worker-{job.id}.json"
         artifact_path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        # 6. Mark succeeded
-        succeeded = queue.mark_succeeded(job)
+        # 6. Mark as a reviewable proposal. This is intentionally not
+        # "succeeded"; no code edits or validation commands have run here.
+        queue.mark_proposal_ready(job)
         result = WorkerResult(status="pass", processed=1, job_id=job.id)
 
     except Exception as exc:

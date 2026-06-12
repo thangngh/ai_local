@@ -59,7 +59,13 @@ class RuntimeControlSnapshot:
 def _total_tasks(counts: dict[str, int]) -> int:
     return (
         counts.get("pending", 0)
+        + counts.get("claimed", 0)
         + counts.get("running", 0)
+        + counts.get("proposal_ready", 0)
+        + counts.get("awaiting_approval", 0)
+        + counts.get("approved", 0)
+        + counts.get("applied", 0)
+        + counts.get("validated", 0)
         + counts.get("succeeded", 0)
         + counts.get("failed", 0)
         + counts.get("cancelled", 0)
@@ -164,6 +170,9 @@ def render_runtime_control_snapshot(
         "TASKS "
         f"total={_total_tasks(q)} "
         f"pending={q.get('pending', 0)} "
+        f"proposals={q.get('proposal_ready', 0)} "
+        f"approved={q.get('approved', 0)} "
+        f"validated={q.get('validated', 0)} "
         f"done={q.get('succeeded', 0)} "
         f"cancelled={q.get('cancelled', 0)}",
         worker_line,

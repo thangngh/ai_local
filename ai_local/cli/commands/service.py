@@ -92,21 +92,32 @@ def service_install_group(
     dry_run: bool = typer.Option(False, "--dry-run"),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
     strategy: str = typer.Option("nssm", "--strategy"),
+    ollama: bool = typer.Option(False, "--ollama", help="Enable Ollama proposal generation in the service daemon."),
+    ollama_model: str | None = typer.Option(None, "--ollama-model"),
+    ollama_base_url: str | None = typer.Option(None, "--ollama-base-url"),
 ) -> None:
     if _is_pywin32(strategy):
-        _pywin32_install(dry_run, workspace)
+        _pywin32_install(dry_run, workspace, ollama=ollama, ollama_model=ollama_model, ollama_base_url=ollama_base_url)
     else:
-        _nssm_install(dry_run, workspace)
+        _nssm_install(dry_run, workspace, ollama=ollama, ollama_model=ollama_model, ollama_base_url=ollama_base_url)
 
 
-def _nssm_install(dry_run: bool, workspace: Path) -> None:
+def _nssm_install(
+    dry_run: bool,
+    workspace: Path,
+    *,
+    ollama: bool = False,
+    ollama_model: str | None = None,
+    ollama_base_url: str | None = None,
+) -> None:
+    ollama_args = _ollama_args(ollama=ollama, ollama_model=ollama_model, ollama_base_url=ollama_base_url)
     if dry_run:
         _ensure_workspace(workspace)
         typer.echo("SERVICE install dry-run")
         typer.echo("NAME AI Local Agent Runtime")
         typer.echo(
             f"COMMAND python -m ai_local.cli daemon run "
-            f"--workspace {workspace} --loop --poll-interval 1.0"
+            f"--workspace {workspace} --loop --poll-interval 1.0{ollama_args}"
         )
         typer.echo("NOTE dry-run only; no Windows service was created")
         return
@@ -124,15 +135,23 @@ def _nssm_install(dry_run: bool, workspace: Path) -> None:
         typer.echo(f"ID {SERVICE_ID}")
         typer.echo(
             f"COMMAND python -m ai_local.cli daemon run "
-            f"--workspace {abs_ws} --loop --poll-interval 1.0"
+            f"--workspace {abs_ws} --loop --poll-interval 1.0{ollama_args}"
         )
     except RuntimeError as exc:
         typer.echo(f"SERVICE install FAIL reason=\"{exc}\"")
         raise typer.Exit(code=1) from exc
 
 
-def _pywin32_install(dry_run: bool, workspace: Path) -> None:
+def _pywin32_install(
+    dry_run: bool,
+    workspace: Path,
+    *,
+    ollama: bool = False,
+    ollama_model: str | None = None,
+    ollama_base_url: str | None = None,
+) -> None:
     abs_ws = _resolve_workspace(workspace)
+    ollama_args = _ollama_args(ollama=ollama, ollama_model=ollama_model, ollama_base_url=ollama_base_url)
 
     if dry_run:
         typer.echo("SERVICE install dry-run")
@@ -141,7 +160,7 @@ def _pywin32_install(dry_run: bool, workspace: Path) -> None:
         typer.echo(f"ID {PYWIN32_SERVICE_ID}")
         typer.echo(
             f"COMMAND python -m ai_local.runtime.pywin32_service "
-            f"install --workspace {abs_ws}"
+            f"install --workspace {abs_ws}{ollama_args}"
         )
         typer.echo("NOTE dry-run only; no Windows service was created")
         return
@@ -152,15 +171,39 @@ def _pywin32_install(dry_run: bool, workspace: Path) -> None:
     try:
         from ai_local.runtime.pywin32_service import install_pywin32_service
 
-        install_pywin32_service(abs_ws, startup="manual")
+        install_pywin32_service(
+            abs_ws,
+            startup="manual",
+            ollama_enabled=ollama,
+            ollama_model=ollama_model,
+            ollama_base_url=ollama_base_url,
+        )
         typer.echo("SERVICE install PASS")
         typer.echo("STRATEGY pywin32")
         typer.echo(f"NAME {PYWIN32_SERVICE_DISPLAY_NAME}")
         typer.echo(f"ID {PYWIN32_SERVICE_ID}")
         typer.echo(f"WORKSPACE {abs_ws}")
+        if ollama:
+            typer.echo("OLLAMA enabled=true")
     except RuntimeError as exc:
         typer.echo(f"SERVICE install FAIL reason=\"{exc}\"")
         raise typer.Exit(code=1) from exc
+
+
+def _ollama_args(
+    *,
+    ollama: bool,
+    ollama_model: str | None,
+    ollama_base_url: str | None,
+) -> str:
+    parts: list[str] = []
+    if ollama:
+        parts.append(" --ollama")
+    if ollama_model:
+        parts.append(f" --ollama-model {ollama_model}")
+    if ollama_base_url:
+        parts.append(f" --ollama-base-url {ollama_base_url}")
+    return "".join(parts)
 
 
 # ── Uninstall ─────────────────────────────────────────────────────────────────

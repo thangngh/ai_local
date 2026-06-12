@@ -11,6 +11,10 @@ def _content_hash(text: str) -> str:
     return sha256(text.encode("utf-8")).hexdigest()
 
 
+def _normalized_text(text: str) -> str:
+    return "\n".join(line.rstrip() for line in text.strip().splitlines())
+
+
 @dataclass
 class KnowledgeEntry:
     id: int
@@ -67,7 +71,7 @@ class SQLiteKnowledgeStore:
                 INSERT INTO knowledge (kind, title, content, source_path, tags_json, content_hash, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("file", title, content, str(path), tags_json, _content_hash(content), now, now),
+                ("file", title, content, str(path), tags_json, _content_hash(_normalized_text(content)), now, now),
             )
             entry_id = cursor.lastrowid
             conn.commit()
@@ -94,7 +98,7 @@ class SQLiteKnowledgeStore:
         # Duplicate check: prevent same content being inserted twice
         with self._connect() as conn:
             # Use content hash for reliable dedup
-            content_hash = _content_hash(text)
+            content_hash = _content_hash(_normalized_text(text))
             cursor = conn.execute(
                 """
                 SELECT id FROM knowledge WHERE content_hash = ? AND kind = 'note'
@@ -113,7 +117,7 @@ class SQLiteKnowledgeStore:
                 INSERT INTO knowledge (kind, title, content, source_path, tags_json, content_hash, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("note", title, text, None, tags_json, _content_hash(text), now, now),
+                ("note", title, text, None, tags_json, content_hash, now, now),
             )
             entry_id = cursor.lastrowid
             conn.commit()
@@ -186,3 +190,44 @@ class SQLiteKnowledgeStore:
 
             entries.sort(key=_rank)
             return entries
+
+    def remove(self, entry_id: int) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM knowledge WHERE id = ?", (entry_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def cleanup_duplicates(self) -> list[int]:
+        """Remove duplicate rows by normalized content hash, keeping the oldest row."""
+        self.initialize()
+        removed: list[int] = []
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM knowledge ORDER BY id").fetchall()
+            seen: set[tuple[str, str]] = set()
+            for row in rows:
+                content_hash = row["content_hash"] or _content_hash(_normalized_text(str(row["content"])))
+                key = (str(row["kind"]), str(content_hash))
+                row_id = int(row["id"])
+                if key in seen:
+                    removed.append(row_id)
+                    continue
+                seen.add(key)
+                if row["content_hash"] != content_hash:
+                    conn.execute("UPDATE knowledge SET content_hash = ? WHERE id = ?", (content_hash, row_id))
+            if removed:
+                conn.executemany("DELETE FROM knowledge WHERE id = ?", [(entry_id,) for entry_id in removed])
+            conn.commit()
+        return removed
+
+    def stats(self) -> dict[str, int]:
+        self.initialize()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, COUNT(*) AS count FROM knowledge GROUP BY kind ORDER BY kind"
+            ).fetchall()
+        stats = {"total": 0}
+        for row in rows:
+            count = int(row["count"])
+            stats[str(row["kind"])] = count
+            stats["total"] += count
+        return stats

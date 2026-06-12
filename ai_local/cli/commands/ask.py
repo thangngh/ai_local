@@ -1,4 +1,5 @@
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -8,15 +9,23 @@ from ai_local.indexer.sqlite_store import KnowledgeIndexStore
 from ai_local.knowledge.sqlite_store import SQLiteKnowledgeStore
 
 
+def _safe_print(msg: str) -> None:
+    """Print with fallback encoding to handle Vietnamese/Unicode."""
+    try:
+        typer.echo(msg)
+    except UnicodeEncodeError:
+        safe = msg.encode(sys.stdout.encoding, errors="replace").decode(sys.stdout.encoding)
+        typer.echo(safe)
+
+
 def ask_group(
     query: str = typer.Argument(...),
     workspace: Path = typer.Option(Path("."), "--workspace", "-w"),
     show_evidence: bool = typer.Option(False, "--show-evidence"),
 ) -> None:
-    # Need to import _ensure_workspace here to avoid circular imports
-    from ai_local.cli.app import _ensure_workspace
+    from ai_local.config.workspace import ensure_workspace
 
-    paths = _ensure_workspace(workspace)
+    paths = ensure_workspace(workspace)
 
     # 1. Search durable knowledge store
     store = SQLiteKnowledgeStore(paths["knowledge_db"])
@@ -54,11 +63,11 @@ def ask_group(
             answer_draft = ""
 
     # 4. Print
-    typer.echo(f"DECISION: {decision}")
-    typer.echo(f"QUESTION: {query}")
+    _safe_print(f"DECISION: {decision}")
+    _safe_print(f"QUESTION: {query}")
     if answer_draft:
-        typer.echo("ANSWER_DRAFT:")
-        typer.echo(answer_draft)
+        _safe_print("ANSWER_DRAFT:")
+        _safe_print(answer_draft)
 
     evidence_list = []
 
@@ -74,7 +83,7 @@ def ask_group(
             }
         )
         if show_evidence:
-            typer.echo(f"EVIDENCE: knowledge_id={hit.id} title={hit.title}")
+            _safe_print(f"EVIDENCE: knowledge_id={hit.id} title={hit.title}")
 
     for hit in index_hits:
         evidence_list.append(
@@ -87,7 +96,7 @@ def ask_group(
             }
         )
         if show_evidence:
-            typer.echo(f"EVIDENCE: {hit.source_ref}")
+            _safe_print(f"EVIDENCE: {hit.source_ref}")
 
     # 5. Write report
     report = {
@@ -99,5 +108,5 @@ def ask_group(
 
     timestamp = int(time.time())
     report_path = paths["reports"] / f"ask-{timestamp}.json"
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    typer.echo(f"REPORT: {report_path}")
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    _safe_print(f"REPORT: {report_path}")

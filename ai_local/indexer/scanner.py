@@ -187,6 +187,8 @@ def _ignored_path(path: Path) -> bool:
         "__pycache__",
         "node_modules",
         "dist",
+        "build",
+        "coverage",
         "target",
         ".next",
         ".ai-local",

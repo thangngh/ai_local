@@ -106,6 +106,19 @@ def test_changed_index_skips_binary_and_unchanged_files(tmp_path: Path) -> None:
     assert [document.file.path for document in third.documents] == ["service.py"]
 
 
+def test_scan_files_ignores_generated_and_runtime_dirs(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "cart.store.ts").write_text("export const cart = true\n", encoding="utf-8")
+    for generated in [".next", "node_modules", ".ai-local", "dist", "coverage"]:
+        folder = tmp_path / generated
+        folder.mkdir()
+        (folder / "ignored.ts").write_text("ignore me\n", encoding="utf-8")
+
+    scanned = scan_files(tmp_path)
+
+    assert [path.relative_to(tmp_path).as_posix() for path in scanned] == ["src/cart.store.ts"]
+
+
 def test_sqlite_knowledge_index_persists_manifest_and_fts_chunks(tmp_path: Path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()

@@ -81,7 +81,14 @@ def _config_path(workspace: Path) -> Path:
     return workspace.resolve() / ".ai-local" / "reports" / "pywin32-service.json"
 
 
-def write_config(workspace: Path, *, poll_interval: float = 1.0) -> dict:
+def write_config(
+    workspace: Path,
+    *,
+    poll_interval: float = 1.0,
+    ollama_enabled: bool = False,
+    ollama_model: str | None = None,
+    ollama_base_url: str | None = None,
+) -> dict:
     """Write the pywin32 service config JSON.
 
     Returns the config dict that was written.
@@ -91,6 +98,9 @@ def write_config(workspace: Path, *, poll_interval: float = 1.0) -> dict:
         "workspace": str(abs_ws),
         "poll_interval": poll_interval,
         "service_id": SERVICE_ID,
+        "ollama_enabled": ollama_enabled,
+        "ollama_model": ollama_model,
+        "ollama_base_url": ollama_base_url,
     }
     path = _config_path(abs_ws)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,9 +152,24 @@ if _pywin32_modules is not None:
                 ) as key:
                     workspace_str = winreg.QueryValueEx(key, "workspace")[0]
                     poll_interval_str = winreg.QueryValueEx(key, "poll_interval")[0]
+                    try:
+                        ollama_enabled_str = winreg.QueryValueEx(key, "ollama_enabled")[0]
+                    except FileNotFoundError:
+                        ollama_enabled_str = "false"
+                    try:
+                        ollama_model = winreg.QueryValueEx(key, "ollama_model")[0]
+                    except FileNotFoundError:
+                        ollama_model = ""
+                    try:
+                        ollama_base_url = winreg.QueryValueEx(key, "ollama_base_url")[0]
+                    except FileNotFoundError:
+                        ollama_base_url = ""
                     self._config = {
                         "workspace": workspace_str,
                         "poll_interval": float(poll_interval_str),
+                        "ollama_enabled": str(ollama_enabled_str).lower() == "true",
+                        "ollama_model": str(ollama_model) or None,
+                        "ollama_base_url": str(ollama_base_url) or None,
                     }
             except Exception as exc:
                 servicemanager.LogMsg(
@@ -164,6 +189,24 @@ if _pywin32_modules is not None:
 
             workspace = Path(self._config["workspace"])  # noqa: PLW2901
             poll_interval = self._config.get("poll_interval", 1.0)
+            ollama_client = None
+            if self._config.get("ollama_enabled"):
+                try:
+                    from ai_local.runtime.ollama_worker import build_worker_ollama_client
+
+                    ollama_client = build_worker_ollama_client(
+                        workspace=workspace,
+                        enabled=True,
+                        model=self._config.get("ollama_model"),
+                        base_url=self._config.get("ollama_base_url"),
+                    )
+                except Exception as exc:
+                    servicemanager.LogMsg(
+                        servicemanager.EVENTLOG_ERROR_TYPE,
+                        0xF007,
+                        (self._svc_name_, f"Ollama init failed: {exc}"),
+                    )
+                    return
 
             def emit(msg: str) -> None:
                 servicemanager.LogMsg(
@@ -184,6 +227,7 @@ if _pywin32_modules is not None:
                     poll_interval=poll_interval,
                     should_stop=should_stop,
                     emit_line=emit,
+                    ollama_client=ollama_client,
                 )
                 servicemanager.LogMsg(
                     servicemanager.EVENTLOG_INFORMATION_TYPE,
@@ -240,12 +284,25 @@ def _run_python_module(args: list[str], timeout: int = 30) -> subprocess.Complet
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def install_pywin32_service(workspace: Path, *, startup: str = "manual") -> None:
+def install_pywin32_service(
+    workspace: Path,
+    *,
+    startup: str = "manual",
+    ollama_enabled: bool = False,
+    ollama_model: str | None = None,
+    ollama_base_url: str | None = None,
+) -> None:
     _check_windows()
     require_pywin32()
     abs_ws = _workspace_ok(workspace)
 
-    write_config(abs_ws, poll_interval=1.0)
+    write_config(
+        abs_ws,
+        poll_interval=1.0,
+        ollama_enabled=ollama_enabled,
+        ollama_model=ollama_model,
+        ollama_base_url=ollama_base_url,
+    )
 
     import win32serviceutil
 
@@ -261,6 +318,9 @@ def install_pywin32_service(workspace: Path, *, startup: str = "manual") -> None
         )
         win32serviceutil.SetServiceCustomOption(SERVICE_ID, "workspace", str(abs_ws))
         win32serviceutil.SetServiceCustomOption(SERVICE_ID, "poll_interval", "1.0")
+        win32serviceutil.SetServiceCustomOption(SERVICE_ID, "ollama_enabled", "true" if ollama_enabled else "false")
+        win32serviceutil.SetServiceCustomOption(SERVICE_ID, "ollama_model", ollama_model or "")
+        win32serviceutil.SetServiceCustomOption(SERVICE_ID, "ollama_base_url", ollama_base_url or "")
     except Exception as exc:  # pragma: no cover - exercised by tests
         raise RuntimeError(f"Failed to install pywin32 service: {exc}") from exc
 
@@ -296,8 +356,14 @@ def remove_pywin32_service() -> None:
     _check_windows()
     require_pywin32()
     import win32serviceutil
+    import pywintypes
     try:
         win32serviceutil.RemoveService(SERVICE_ID)
+    except pywintypes.error as exc:
+        # (1060, 'GetServiceKeyName', '...does not exist...') → idempotent
+        if getattr(exc, "winerror", None) == 1060:
+            return
+        raise RuntimeError(f"Failed to remove pywin32 service: {exc}") from exc
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to remove pywin32 service: {exc}") from exc
 
@@ -367,6 +433,9 @@ def main() -> None:
         default="manual",
         help="Startup type for install (default: manual)",
     )
+    parser.add_argument("--ollama", action="store_true", help="Enable Ollama proposal generation in the service daemon")
+    parser.add_argument("--ollama-model", default=None)
+    parser.add_argument("--ollama-base-url", default=None)
 
     args = parser.parse_args()
 
@@ -375,7 +444,13 @@ def main() -> None:
             print("ERROR: --workspace is required for install")
             sys.exit(1)
         try:
-            install_pywin32_service(args.workspace, startup=args.startup)
+            install_pywin32_service(
+                args.workspace,
+                startup=args.startup,
+                ollama_enabled=args.ollama,
+                ollama_model=args.ollama_model,
+                ollama_base_url=args.ollama_base_url,
+            )
             print("SERVICE install PASS")
             print("STRATEGY pywin32")
             print(f"NAME {SERVICE_DISPLAY_NAME}")

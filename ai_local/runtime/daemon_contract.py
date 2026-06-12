@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ai_local.llm.ollama import OllamaClient
 from ai_local.runtime.worker_contract import ensure_workspace
 
 
@@ -111,6 +112,7 @@ def run_daemon_loop(
     max_iterations: int | None = None,
     should_stop: Callable[[], bool] | None = None,
     emit_line: Callable[[str], None] | None = None,
+    ollama_client: OllamaClient | None = None,
 ) -> int:
     """Run the daemon loop, processing jobs until a stop condition is met.
 
@@ -159,7 +161,7 @@ def run_daemon_loop(
                 break
 
             iteration += 1
-            result = run_worker_once(workspace)
+            result = run_worker_once(workspace, ollama_client=ollama_client)
 
             # Console output
             if emit_line:

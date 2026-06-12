@@ -39,8 +39,11 @@ def refresh_project_index(
     store: KnowledgeIndexStore,
     *,
     chunk_lines: int = 40,
+    clear_store: bool = False,
 ) -> IndexBatchResult:
     store.initialize()
+    if clear_store:
+        store.clear()
     paths = scan_files(root)
     scanned_refs = {_project_ref(path, root) for path in paths}
     previous_manifest = store.manifest()
@@ -81,8 +84,9 @@ def refresh_and_retrieve_project(
     chunk_lines: int = 40,
     max_hits: int = 5,
     vector_provider: VectorCandidateProvider | None = None,
+    clear_store: bool = False,
 ) -> ProjectIndexRetrieval:
-    batch = refresh_project_index(root, store, chunk_lines=chunk_lines)
+    batch = refresh_project_index(root, store, chunk_lines=chunk_lines, clear_store=clear_store)
     package = retrieve_index(
         query,
         store,

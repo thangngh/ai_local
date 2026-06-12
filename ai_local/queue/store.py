@@ -30,6 +30,10 @@ class InMemoryQueueStore:
         job.status = JobStatus.SUCCEEDED
         return job
 
+    def mark_proposal_ready(self, job: Job) -> Job:
+        job.status = JobStatus.PROPOSAL_READY
+        return job
+
     def mark_failed(self, job: Job, error: str) -> Job:
         job.last_error = error
         job.status = JobStatus.DEAD_LETTER if job.attempts >= job.max_attempts else JobStatus.PENDING
@@ -108,6 +112,11 @@ class SQLiteQueueStore:
         succeeded = job.model_copy(update={"status": JobStatus.SUCCEEDED})
         self._persist(succeeded)
         return succeeded
+
+    def mark_proposal_ready(self, job: Job) -> Job:
+        proposal = job.model_copy(update={"status": JobStatus.PROPOSAL_READY})
+        self._persist(proposal)
+        return proposal
 
     def mark_failed(self, job: Job, error: str) -> Job:
         failed_status = JobStatus.DEAD_LETTER if job.attempts >= job.max_attempts else JobStatus.PENDING
